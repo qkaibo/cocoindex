@@ -36,6 +36,7 @@ Environment variables:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import fnmatch
 import os
 import pathlib
@@ -136,6 +137,29 @@ def _resolve_module(relative_path: str, modules: Sequence[ModuleConfig]) -> str 
             if fnmatch.fnmatch(relative_path, glob_pattern):
                 return mod.name
     return None
+
+
+def _module_code_roots(mod: ModuleConfig, aosp_root: pathlib.Path) -> list[pathlib.Path]:
+    """Extract base directories from module code_globs for targeted walking.
+
+    Example — BSP code_globs includes ``**/hardware/**`` → returns
+    ``[aosp_root/hardware, aosp_root/device, …]``.  Only directories that
+    actually exist are returned, so this works across different AOSP layouts.
+    """
+    roots: list[pathlib.Path] = []
+    seen: set[str] = set()
+    for pattern in mod.code_globs:
+        # Patterns like "**/hardware/**" → extract "hardware"
+        parts = pattern.strip("/").split("/")
+        for p in parts:
+            if p not in ("**", "*", ""):
+                if p not in seen:
+                    d = aosp_root / p
+                    if d.is_dir():
+                        roots.append(d)
+                        seen.add(p)
+                break
+    return roots
 
 
 def _active_modules() -> list[ModuleConfig]:
@@ -428,10 +452,11 @@ async def process_code_file(
     module: str,
     project: str,
     target: qdrant.CollectionTarget,
+    file_rel_path: pathlib.PurePath,
 ) -> None:
     text = await file.read_text()
-    fname = str(file.file_path.path.name)
-    fpath = file.file_path.path
+    fname = str(file_rel_path.name)
+    fpath = file_rel_path
     language = _guess_language(fname)
 
     chunks = await asyncio.to_thread(
@@ -483,6 +508,15 @@ async def app_main(
     wiki_root: pathlib.Path,
     project: str,
 ) -> None:
+    # ── Enlarge default thread pool to prevent deadlock ────────────────
+    # Python's default ThreadPoolExecutor (16 threads on this machine) is
+    # shared by asyncio.to_thread (tree-sitter splitting) and
+    # sync_to_async_iter (directory walk consumer). When BSP processing
+    # saturates the pool with split tasks, the FRAMEWORK directory walk
+    # can't acquire a thread for q.get() → permanent deadlock.
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=64))
+
     collection_name = _collection_name(project)
     _ensure_collection(coco.use_context(QDRANT_DB), collection_name)
 
@@ -509,26 +543,33 @@ async def app_main(
     wiki_root = wiki_root.resolve()
 
     for mod in modules:
-        # ── Code ──
-        code_files = localfs.walk_dir(
-            aosp_root,
-            recursive=True,
-            path_matcher=PatternFilePathMatcher(
-                included_patterns=_CODE_GLOBS,
-                excluded_patterns=_CODE_EXCLUDES,
-            ),
-            live=True,
-        )
-        async for path_key, f in code_files.items():
-            rel = str(f.file_path.path)
-            if _resolve_module(rel, [mod]) == mod.name:
+        # ── Code: walk only the directories relevant to this module ──
+        code_roots = _module_code_roots(mod, aosp_root)
+        if not code_roots:
+            print(f"[{mod.name}] ⚠ No matching directories found, skipping code")
+            continue
+        for code_root in code_roots:
+            code_files = localfs.walk_dir(
+                code_root,
+                recursive=True,
+                path_matcher=PatternFilePathMatcher(
+                    included_patterns=_CODE_GLOBS,
+                    excluded_patterns=_CODE_EXCLUDES,
+                ),
+            )
+            async for path_key, f in code_files.items():
+                # Reconstruct the full relative path as if walked from aosp_root
+                # walk_dir yields path_key relative to code_root (e.g. "soc/allwinner/twi.c")
+                # We want "longan/soc/allwinner/twi.c" for Qdrant payload
+                file_full_path = pathlib.PurePath(code_root.name) / path_key
                 await coco.mount(
-                    coco.component_subpath("code", mod.name, path_key),
+                    coco.component_subpath("code", mod.name, str(file_full_path)),
                     process_code_file,
                     f,
                     mod.name,
                     project,
                     target,
+                    file_full_path,
                 )
 
         # ── Wiki ──

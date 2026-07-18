@@ -583,6 +583,27 @@ model.half()  # 2.2GB → 1.1GB，精度无损
 
 当前方案的 tokenizer-only sparse 已经能覆盖大多数关键词搜索场景。
 
+### 模块切换死锁：默认线程池饱和
+
+**症状**：BSP 模块索引完成后，切换到 FRAMEWORK 时进程卡死，CPU 和 GPU 均归零。
+
+**根因**：Python 默认 `ThreadPoolExecutor`（本机 16 线程）被两个来源共享：
+
+1. `asyncio.to_thread` —— tree-sitter 代码切分（`process_code_file` 里调用）
+2. `sync_to_async_iter` —— 目录遍历消费者（`localfs.walk_dir` 内部）
+
+当 BSP 的多个文件并发切分占满 16 个线程后，FRAMEWORK 的目录遍历需要
+`run_in_executor(None, q.get)` 获取一个新线程，但线程池已满 → **永久死锁**。
+
+**修复**：在 `app_main` 开头将默认线程池扩大到 64 线程：
+
+```python
+loop = asyncio.get_running_loop()
+loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=64))
+```
+
+这确保目录遍历消费者和文件切分任务不会互相争抢线程资源。
+
 ## 文件结构
 
 ```
