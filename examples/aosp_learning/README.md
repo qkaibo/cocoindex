@@ -76,7 +76,7 @@ search("MIPI DSI lane config")  或  search("MIPI DSI" --module BSP)
 
 ### 核心策略二：Glob 驱动的模块匹配
 
-模块不是靠目录划分，而是靠 **glob 模式匹配**。在 `models.py` 中定义：
+模块不是靠目录划分，而是靠 **glob 模式匹配**。在 `aw_h618.py` 中定义：
 
 ```python
 MODULES = [
@@ -97,17 +97,18 @@ MODULES = [
 
 ### 核心策略三：按模块控制索引范围
 
+**每个模块现在是独立的 CocoIndex App**，写入同一个 Qdrant collection。
+这样每个模块有独立的 LMDB 状态文件——BSP 被 kill 只会损坏 BSP 的状态，
+FRAMEWORK 和 APP 毫发无伤。
+
 ```bash
-# 这周学 BSP，只索引 BSP（跳过 APP/FRAMEWORK）
-COCOINDEX_MODULES=BSP cocoindex update main:aw_h618
+# 依次跑（每个模块独立 LMDB，互不影响）：
+cocoindex update aw_h618:aw_h618_bsp        # 11h，索引 1.92M BSP chunks
+cocoindex update aw_h618:aw_h618_framework  # 3h， 索引 480K FRAMEWORK chunks
+cocoindex update aw_h618:aw_h618_app        # 1h， 索引 85K APP chunks
 
-# 下周学 APP — 注意要累加写成 BSP,APP！
-# CocoIndex 是声明式的：本次运行没声明的模块会被视为"已删除"，
-# 只写 APP 会把已建好的 BSP 索引从 Qdrant 中清掉
-COCOINDEX_MODULES=BSP,APP cocoindex update main:aw_h618
-
-# 不设环境变量 = 索引全部
-cocoindex update main:aw_h618
+# 兼容旧写法（aw_h618 别名指向 aw_h618_bsp）：
+cocoindex update aw_h618:aw_h618
 ```
 
 每个模块的 Wiki 也存储在 `wiki_root/{module_name}/` 子目录下，互不干扰。
@@ -119,32 +120,32 @@ cocoindex update main:aw_h618
 ```
 项目            Qdrant collection    CocoIndex checkpoint
 ──────────────────────────────────────────────────────────
-全志 H618       aosp_aw_h618         App "aw_h618"
-MTK  H618       aosp_mtk_h618        App "mtk_h618"
-全志 H619       aosp_aw_h619         App "aw_h619"
+全志 H618       aosp_aw_h618         App "aw_h618_bsp / _framework / _app"（3 个）
+MTK  H618       aosp_mtk_h618        App "mtk_h618_bsp / _framework / _app"（3 个）
+全志 H619       aosp_aw_h619         App "aw_h619_bsp / _framework / _app"（3 个）
 ```
 
 三层隔离：
 
 1. **Qdrant 分 collection**：每个项目一张表（`aosp_{project}`），搜索互不串台，删项目直接删表
-2. **CocoIndex 分 checkpoint**：每个 App 名独立增量状态，重建 A 项目不影响 B
+2. **CocoIndex 分 checkpoint**：每个 App 名独立增量状态，模块间 LMDB 隔离，BSP 挂了不影响 FRAMEWORK
 3. **payload 带 project 字段**：冗余标记，未来如需跨项目对比分析也有据可查
 
-新项目接入只需在 `main.py` 底部照抄一个 App 定义：
+新项目接入只需复制 ``aw_h618.py`` → ``mtk_h618.py``，改三行常量：
 
 ```python
-mtk_h618 = coco.App(
-    coco.AppConfig(name="mtk_h618"),
-    app_main,
-    aosp_root=pathlib.Path("/path/to/mtk-h618-source"),
-    wiki_root=pathlib.Path("./aosp_wiki_mtk"),
-    project="mtk_h618",
-)
+# mtk_h618.py — 复制 aw_h618.py 后只需改这里
+PROJECT = "mtk_h618"
+AOSP_ROOT = pathlib.Path("/path/to/mtk-h618-source")
+WIKI_ROOT = pathlib.Path("./aosp_wiki_mtk")
+
+# 如果新平台的目录布局不同（如 kernel 在 vendor/ 下），
+# 调整 module 的 code_globs 即可。
 ```
 
 ```bash
-cocoindex update main:mtk_h618              # 索引 MTK 项目
-python main.py -p mtk_h618 "gpio 配置"      # 只搜 MTK 项目
+cocoindex update mtk_h618:mtk_h618_bsp       # 索引 MTK BSP
+python mtk_h618.py "gpio 配置"               # 只搜 MTK 项目
 ```
 
 ### 为什么用 Qdrant 而不是 LanceDB
@@ -257,8 +258,8 @@ graph TB
     end
 
     subgraph Query["Hybrid 查询 — dense RRF sparse"]
-        SEARCH_ALL["python main.py -p aw_h618 'query'"]
-        SEARCH_MOD["python main.py -p aw_h618 -m BSP 'query'"]
+        SEARCH_ALL["python aw_h618.py 'query'"]
+        SEARCH_MOD["python aw_h618.py -m BSP 'query'"]
         MCP["MCP Server<br/>AI agent 直接调用"]
     end
 
@@ -327,7 +328,7 @@ walk_dir(wiki_dir, *.md/*.rst/*.txt)
 
 ## 增量更新机制
 
-增量是默认行为——**重跑一次 `cocoindex update main:aw_h618` 就是增量更新**，无需任何额外参数。CocoIndex 的引擎核心能力：
+增量是默认行为——**重跑一次 `cocoindex update aw_h618:aw_h618_bsp` 就是增量更新**，无需任何额外参数。CocoIndex 的引擎核心能力：
 
 ```
 文件A 修改 → 只有 process_code_file(file=A) 重新执行
@@ -349,64 +350,23 @@ Wiki 新增 → 只有 process_wiki_file(file=新wiki) 执行
 
 配合 `cocoindex update -L`（live 模式），文件系统变更 1 秒内触发重处理。
 
-### 为什么 `COCOINDEX_MODULES` 会删数据？
+### 增量更新的正确方式
 
-CocoIndex 是**声明式引擎**——你只声明“本次要处理哪些模块”，引擎负责把实际状态同步成你声明的样子：
-
-```
-第一次：COCOINDEX_MODULES=BSP    → 索引 BSP，Qdrant 里有 BSP 的 16 万向量
-第二次：COCOINDEX_MODULES=APP    → 引擎发现“BSP 没被声明”
-                                  → 认为“BSP 已被移除”
-                                  → 自动删除 BSP 的全部向量 ❌
-```
-
-这和 `rm` 删文件不同——**没有任何确认提示**，引擎默认就是“声明了什么就只留什么”。
-
-### 安全护栏：`_guard_module_removal()`
-
-管线在启动时（`app_main` 开头）会先查 Qdrant，检查已索引模块是否都在本次 `COCOINDEX_MODULES` 中：
-
-```
-Qdrant 中 BSP 有 161034 chunks
-本次 COCOINDEX_MODULES=APP（没有 BSP）
-→ guard 检测到 BSP 有数据但未声明
-→ RuntimeError，拒绝运行，BSP 的向量不动
-```
-
-实际报错：
-```
-RuntimeError: 已索引模块未在本次 COCOINDEX_MODULES 中声明: BSP (161034 chunks)。
-继续运行会删除这些模块的全部向量！
-请累加声明（COCOINDEX_MODULES=APP,BSP），
-或不设环境变量索引全部；确认要删除请设 COCOINDEX_ALLOW_MODULE_REMOVAL=1。
-```
-
-### 正确的增量操作
+每个模块是独立的 App，互不干扰：
 
 ```bash
-# ① 第一天：索引 BSP
-COCOINDEX_MODULES=BSP cocoindex update main:aw_h618
+# ① 索引 BSP（11h）
+cocoindex update aw_h618:aw_h618_bsp
 
-# ② 第二天：加 APP — 累加写 BSP,APP（BSP 的向量不受影响，只增量处理 APP 的文件）
-COCOINDEX_MODULES=BSP,APP cocoindex update main:aw_h618
+# ② 索引 FRAMEWORK（3h）— BSP 的 LMDB 和向量完全不受影响
+cocoindex update aw_h618:aw_h618_framework
 
-# ③ 第三天：又加 FRAMEWORK — 继续累加
-COCOINDEX_MODULES=BSP,APP,FRAMEWORK cocoindex update main:aw_h618
-
-# ④ 或者干脆不设环境变量，索引全部模块
-#    （不加 COCOINDEX_MODULES 就等于“声明全部”，不会触发 guard）
-cocoindex update main:aw_h618
+# ③ 索引 APP（1h）
+cocoindex update aw_h618:aw_h618_app
 ```
 
-### 什么时候 guard 不拦？
-
-| 场景 | guard 行为 | 说明 |
-|------|-----------|------|
-| 首次索引，Qdrant 为空 | 跳过 | 没有数据需要保护 |
-| `COCOINDEX_MODULES=BSP,APP` | 通过 | 所有已索引模块都在声明中 |
-| 不设 `COCOINDEX_MODULES` | 通过 | 等价于声明全部模块 |
-| `COCOINDEX_MODULES=APP`，BSP 已有数据 | **拦截** | RuntimeError，BSP 不会被删 |
-| 设了 `COCOINDEX_ALLOW_MODULE_REMOVAL=1` | 跳过 | 明确确认要删除，不拦 |
+重跑任意模块即增量更新：修改 BSP 文件 → 只跑 `cocoindex update aw_h618:aw_h618_bsp`，
+FRAMEWORK 和 APP 毫发无伤。
 
 > ⚠️ **改参数会触发全量重算**：修改 chunk_size 等切分参数、更换 embedding 模型都会使 memo 失效，导致整个项目重新嵌入（BSP 16 万 chunk，GPU ~20min）。参数应在首次大索引前定好。
 
@@ -583,69 +543,78 @@ model.half()  # 2.2GB → 1.1GB，精度无损
 
 当前方案的 tokenizer-only sparse 已经能覆盖大多数关键词搜索场景。
 
-### 模块切换死锁：默认线程池饱和
+### 管道 hang 死：tree-sitter 异常文件无超时保护
 
-**症状**：BSP 模块索引完成后，切换到 FRAMEWORK 时进程卡死，CPU 和 GPU 均归零。
+**症状**：索引过程中所有 1,024 in-flight 任务停止完成，GPU 归零，进程最终被
+外部信号杀死（exit code 255），LMDB 状态文件损坏。
 
-**根因**：Python 默认 `ThreadPoolExecutor`（本机 16 线程）被两个来源共享：
+**根因**（`live=False` 下原「线程池互斥死锁」结论不成立——目录枚举在 async
+generator 启动前已完成，`sync_to_async_iter` 运行时不需要再抢线程）：
 
-1. `asyncio.to_thread` —— tree-sitter 代码切分（`process_code_file` 里调用）
-2. `sync_to_async_iter` —— 目录遍历消费者（`localfs.walk_dir` 内部）
+1. 单个大文件 / 异常文件导致 tree-sitter 解析 C++/DTS 时长时间阻塞
+2. 64 个 `asyncio.to_thread` 全部阻塞在同一种 splitter 上
+3. channel（1,024 slot）满 → 不能提交新文件 → walk 等 mount 完成 → 死循环
 
-当 BSP 的多个文件并发切分占满 16 个线程后，FRAMEWORK 的目录遍历需要
-`run_in_executor(None, q.get)` 获取一个新线程，但线程池已满 → **永久死锁**。
-
-**修复**：在 `app_main` 开头将默认线程池扩大到 64 线程：
+**修复一**：将默认线程池扩大到 64（提高并发度，降低单个慢文件的影响）：
 
 ```python
 loop = asyncio.get_running_loop()
 loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=64))
 ```
 
-这确保目录遍历消费者和文件切分任务不会互相争抢线程资源。
+**修复二**：`process_code_file` 中 tree-sitter split 加 60s 超时 + 降级：
+
+```python
+try:
+    chunks = await asyncio.wait_for(
+        asyncio.to_thread(_code_splitter.split, text, ..., language=language),
+        timeout=60,
+    )
+except asyncio.TimeoutError:
+    _logger.warning("tree-sitter split timed out: %s", fpath)
+    chunks = await asyncio.to_thread(_code_splitter.split, text, ..., language=None)
+```
+
+超时后回退到纯文本切分（`language=None`），文件内容不丢失，索引仍然完整。
 
 ## 文件结构
 
 ```
 examples/aosp_learning/
-├── main.py           # Pipeline 主体 + 搜索脚本（支持 -p 项目 / -m 模块过滤）
-├── mcp_server.py     # MCP Server：AI agent 可直接查询索引（Claude Code, Codex 等）
-├── models.py         # 数据模型 + ModuleConfig + MODULES 预定义
+├── pipeline.py       # 共享 Pipeline 逻辑（App main、chunk 写入、搜索）
+├── aw_h618.py        # H618 平台配置 + App 定义（一条龙自包含）
+├── mcp_server.py     # MCP Server：AI agent 可直接查询索引
 ├── pyproject.toml    # 依赖声明
 ├── .env.example      # LLM_MODEL 等环境变量模板
 └── README.md         # 本文档
 ```
 
+换平台 → 复制 ``aw_h618.py`` → ``mtk_h618.py``，改三行常量即可。``pipeline.py`` 是通用引擎，所有平台共享。
+
 ## 如何适配自己的 AOSP 场景
 
 ### 1. 定义你的大模块
 
-编辑 `models.py` 中的 `MODULES` 列表。每个模块用 glob 圈定代码范围：
+编辑 `aw_h618.py` 中的 module 定义。每个模块用 glob 圈定代码范围：
 
 ```python
-MODULES = [
-    ModuleConfig(
-        name="BSP",
-        code_globs=["**/kernel/**", "**/hardware/**", "**/device/**", "**/vendor/**"],
-        wiki_dir="bsp",              # wiki_root/bsp/ 下的文档属于 BSP
-        description="板级支持包",
-    ),
-    # 可以自由增加：AUDIO、CAMERA、MODEM 等你自己的划分方式
-]
+BSP = ModuleConfig(
+    name="BSP",
+    code_globs=["**/kernel/**", "**/hardware/**", "**/device/**", "**/vendor/**"],
+    wiki_dir="bsp",
+    description="板级支持包",
+)
+# 可以自由增加：AUDIO、CAMERA、MODEM 等你自己的划分方式
 ```
 
 ### 2. 指向你的代码和 Wiki 根目录
 
-编辑 `main.py` 底部：
+编辑 `aw_h618.py` 顶部：
 
 ```python
-aw_h618 = coco.App(
-    coco.AppConfig(name="aw_h618"),
-    app_main,
-    aosp_root=pathlib.Path("/your/aosp"),         # ← AOSP 源码根
-    wiki_root=pathlib.Path("/your/wiki"),          # ← Wiki 根（含 bsp/ app/ 子目录）
-    project="aw_h618",                             # ← 项目名，决定 collection 名
-)
+PROJECT = "aw_h618"
+AOSP_ROOT = pathlib.Path("/your/aosp")       # ← AOSP 源码根
+WIKI_ROOT = pathlib.Path("/your/wiki")        # ← Wiki 根（含 bsp/ app/ 子目录）
 ```
 
 Wiki 目录约定：
@@ -663,29 +632,29 @@ wiki_root/
 # ① 启动 Qdrant（首次或重启后）
 docker run -d -p 6333:6333 -p 6334:6334 qdrant/qdrant
 
-# ② 今天学 BSP — 只索引 BSP 模块（aw_h618 项目）
-COCOINDEX_MODULES=BSP cocoindex update main:aw_h618
+# ② 今天学 BSP — 只索引 BSP 模块
+cocoindex update aw_h618:aw_h618_bsp
 
-# ③ 搜索时限定项目 + BSP 范围
-python main.py -p aw_h618 -m BSP "mipi dsi 初始化时序"
-python main.py -p aw_h618 -m BSP "gpio 中断配置"
+# ③ 搜索时限定模块范围
+python aw_h618.py -m BSP "mipi dsi 初始化时序"
+python aw_h618.py -m BSP "gpio 中断配置"
 
-# ④ 明天学 APP — 增量索引（累加写 BSP,APP；guard 会拦截漏写 BSP 的情况）
-COCOINDEX_MODULES=BSP,APP cocoindex update main:aw_h618
-python main.py -p aw_h618 -m APP "activity 启动流程"
+# ④ 明天学 APP — 索引 APP 模块
+cocoindex update aw_h618:aw_h618_app
+python aw_h618.py -m APP "activity 启动流程"
 
-# ⑤ 跨模块搜索（仍限定在当前项目内）
-python main.py -p aw_h618 "亮度调节 backlight"
+# ⑤ 跨模块搜索（所有模块在同一个 Qdrant collection 中）
+python aw_h618.py "亮度调节 backlight"
 
-# ⑥ 新芯片/新厂商来了 — 加一个 App 定义后独立索引，与 aw_h618 互不影响
-cocoindex update main:mtk_h618
+# ⑥ 新芯片/新厂商来了 — 复制 aw_h618.py → mtk_h618.py，改三行常量
+cocoindex update mtk_h618:mtk_h618_bsp
 ```
 
-**关键优势**：学完 BSP 再学 APP 时，BSP 的索引已经存在，跨模块搜索（如"背光调节从 App 到驱动的全链路"）立刻可用。
+**关键优势**：BSP 和 APP 各自独立 LMDB，学 APP 时 BSP 不受任何影响。跨模块搜索（如"背光调节从 App 到驱动的全链路"）立刻可用。
 
 ### 4. 加新语言支持
 
-在 `main.py` 的 `_CODE_LANGUAGES` 里加一行：
+在 `pipeline.py` 的 `_CODE_LANGUAGES` 里加一行：
 
 ```python
 _CODE_LANGUAGES = {
@@ -725,7 +694,7 @@ AOSP 源码量巨大（全量 50-100GB），但**实际学习时按大模块索�
 Qdrant 是本方案的默认选择，但如果想快速体验（不需要装 Docker），可以切回 LanceDB：
 
 ```python
-# main.py 改动 — 从 Qdrant 切回 LanceDB
+# pipeline.py 改动 — 从 Qdrant 切回 LanceDB
 
 # 1. import
 # from cocoindex.connectors import qdrant
