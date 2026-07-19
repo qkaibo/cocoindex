@@ -17,7 +17,7 @@ import pathlib
 import re
 import threading
 from dataclasses import dataclass
-from typing import AsyncIterator, Literal, Sequence
+from typing import Any, AsyncIterator, Literal, Sequence
 
 _logger = logging.getLogger(__name__)
 
@@ -67,10 +67,45 @@ QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6334")
 TOP_K = 10
 EMBED_MODEL = "BAAI/bge-m3"
 VEC_DIM = 1024
+_DEFAULT_CONFIG = pathlib.Path(__file__).resolve().parent / "platforms.yaml"
 
 
 def collection_name(project: str) -> str:
     return f"aosp_{project}"
+
+
+def load_platforms(config_path: pathlib.Path | None = None) -> dict[str, Any]:
+    """Load platform configurations from YAML.
+
+    Returns a dict mapping project name → platform config with keys:
+    ``aosp_root``, ``wiki_root``, ``modules`` (list of ModuleConfig dicts).
+    """
+    import yaml
+
+    path = config_path or _DEFAULT_CONFIG
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    return data["platforms"]
+
+
+def make_app(
+    project: str,
+    aosp_root: pathlib.Path,
+    wiki_root: pathlib.Path,
+    module: ModuleConfig,
+) -> coco.App:
+    """Create a CocoIndex App for a single module.
+
+    Each module gets an independent LMDB via ``AppConfig(name=...)``.
+    """
+    return coco.App(
+        coco.AppConfig(name=f"{project}_{module.name.lower()}"),
+        app_main,
+        aosp_root=aosp_root,
+        wiki_root=wiki_root,
+        project=project,
+        module=module,
+    )
 
 
 # ── Context keys ────────────────────────────────────────────────────────
@@ -402,15 +437,14 @@ async def process_code_file(
                 text, chunk_size=1000, min_chunk_size=300, chunk_overlap=200,
                 language=language,
             ),
-            timeout=60,
+            timeout=300,
         )
     except asyncio.TimeoutError:
         _logger.warning(
             "tree-sitter split timed out (%d B, lang=%s), falling back to plain-text: %s",
             len(text), language, fpath,
         )
-        chunks = await asyncio.to_thread(
-            _code_splitter.split,
+        chunks = _code_splitter.split(
             text, chunk_size=1000, min_chunk_size=300, chunk_overlap=200,
             language=None,
         )
@@ -459,7 +493,7 @@ async def app_main(
     module: ModuleConfig,
 ) -> None:
     loop = asyncio.get_running_loop()
-    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=64))
+    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=256))
 
     cn = collection_name(project)
     _ensure_collection(coco.use_context(QDRANT_DB), cn)

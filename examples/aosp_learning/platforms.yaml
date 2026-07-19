@@ -1,0 +1,35 @@
+# AOSP 学习平台配置
+# 新增芯片平台：复制一个 platform 块，修改 aosp_root / wiki_root / modules 即可
+#
+# Prefect Web UI 启动后，在 http://<your-ip>:4200 可触发索引和监控进度
+# 远程开发务必先执行:
+#   prefect config set PREFECT_SERVER_API_HOST=<your-ip>
+#   prefect config set PREFECT_API_URL=http://<your-ip>:4200/api
+
+platforms:
+  aw_h618:
+    aosp_root: /CM/work/h618/android12/H618-android-20230427-v1.1
+    wiki_root: ./aosp_wiki
+    modules:
+      - name: BSP
+        code_globs:
+          - "**/hardware/**"
+          - "**/device/**"
+          - "**/vendor/**"
+          - "**/longan/**"
+        wiki_dir: bsp
+        description: "板级支持包：kernel驱动(H618 longan) + DTS + HAL + vendor配置"
+
+      - name: FRAMEWORK
+        code_globs:
+          - "**/frameworks/**"
+          - "**/system/**"
+        wiki_dir: framework
+        description: "Android Framework层：system_server, JNI, 系统服务"
+
+      - name: APP
+        code_globs:
+          - "**/packages/**"
+          - "**/cts/**"
+        wiki_dir: app
+        description: "应用层：Settings, Launcher, CTS测试"

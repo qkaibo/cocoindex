@@ -76,24 +76,30 @@ search("MIPI DSI lane config")  或  search("MIPI DSI" --module BSP)
 
 ### 核心策略二：Glob 驱动的模块匹配
 
-模块不是靠目录划分，而是靠 **glob 模式匹配**。在 `aw_h618.py` 中定义：
+模块不是靠目录划分，而是靠 **glob 模式匹配**。在 `platforms.yaml` 中定义：
 
-```python
-MODULES = [
-    ModuleConfig(
-        name="BSP",
-        code_globs=["**/kernel/**", "**/hardware/**", "**/device/**", "**/vendor/**"],
-        wiki_dir="bsp",
-    ),
-    ModuleConfig(
-        name="APP",
-        code_globs=["**/packages/**", "**/cts/**"],
-        wiki_dir="app",
-    ),
-]
+```yaml
+# platforms.yaml
+platforms:
+  aw_h618:
+    aosp_root: /CM/work/h618/android12/...
+    wiki_root: ./aosp_wiki
+    modules:
+      - name: BSP
+        code_globs:
+          - "**/hardware/**"
+          - "**/device/**"
+          - "**/vendor/**"
+          - "**/longan/**"
+        wiki_dir: bsp
+      - name: APP
+        code_globs:
+          - "**/packages/**"
+          - "**/cts/**"
+        wiki_dir: app
 ```
 
-一个文件可能匹配多个模块（如 `kernel/` 同时被 BSP 和 KERNEL 模块覆盖），**第一个匹配的模块获胜**。
+一个文件可能匹配多个模块，**第一个匹配的模块获胜**。配置写在 YAML 中，新增平台不用改任何 Python 代码。
 
 ### 核心策略三：按模块控制索引范围
 
@@ -131,21 +137,29 @@ MTK  H618       aosp_mtk_h618        App "mtk_h618_bsp / _framework / _app"（3 
 2. **CocoIndex 分 checkpoint**：每个 App 名独立增量状态，模块间 LMDB 隔离，BSP 挂了不影响 FRAMEWORK
 3. **payload 带 project 字段**：冗余标记，未来如需跨项目对比分析也有据可查
 
-新项目接入只需复制 ``aw_h618.py`` → ``mtk_h618.py``，改三行常量：
+新项目接入只需在 ``platforms.yaml`` 加一个块：
 
-```python
-# mtk_h618.py — 复制 aw_h618.py 后只需改这里
-PROJECT = "mtk_h618"
-AOSP_ROOT = pathlib.Path("/path/to/mtk-h618-source")
-WIKI_ROOT = pathlib.Path("./aosp_wiki_mtk")
-
-# 如果新平台的目录布局不同（如 kernel 在 vendor/ 下），
-# 调整 module 的 code_globs 即可。
+```yaml
+# platforms.yaml — 新增 MTK H618
+platforms:
+  mtk_h618:
+    aosp_root: /path/to/mtk-h618-source
+    wiki_root: ./aosp_wiki_mtk
+    modules:
+      - name: BSP
+        code_globs: ["**/kernel/**", "**/hardware/**", ...]
+        wiki_dir: bsp
+      # ... 其他模块
 ```
 
 ```bash
-cocoindex update mtk_h618:mtk_h618_bsp       # 索引 MTK BSP
-python mtk_h618.py "gpio 配置"               # 只搜 MTK 项目
+# 索引 MTK 项目（CLI 模式）
+cocoindex update mtk_h618:mtk_h618_bsp
+
+# 或通过 Prefect Web UI 一键触发
+prefect config set PREFECT_SERVER_API_HOST=<your-ip>
+prefect config set PREFECT_API_URL=http://<your-ip>:4200/api
+prefect server start   # → http://<your-ip>:4200
 ```
 
 ### 为什么用 Qdrant 而不是 LanceDB
@@ -581,41 +595,56 @@ except asyncio.TimeoutError:
 
 ```
 examples/aosp_learning/
-├── pipeline.py       # 共享 Pipeline 逻辑（App main、chunk 写入、搜索）
-├── aw_h618.py        # H618 平台配置 + App 定义（一条龙自包含）
+├── pipeline.py       # 共享 Pipeline 引擎（App main、chunk 写入、搜索）
+├── flows.py          # Prefect 编排层（Web UI 触发 + 进度监控）
+├── platforms.yaml    # 芯片平台配置中心（编辑 YAML 即可新增平台）
+├── aw_h618.py        # H618 平台入口（CLI 兼容 + 交互式搜索）
 ├── mcp_server.py     # MCP Server：AI agent 可直接查询索引
 ├── pyproject.toml    # 依赖声明
 ├── .env.example      # LLM_MODEL 等环境变量模板
 └── README.md         # 本文档
 ```
 
-换平台 → 复制 ``aw_h618.py`` → ``mtk_h618.py``，改三行常量即可。``pipeline.py`` 是通用引擎，所有平台共享。
+**三文件职责**：
+
+| 文件 | 改不改 | 说明 |
+|------|--------|------|
+| `platforms.yaml` | **编辑** | 新增平台/模块的唯一入口，纯 YAML，不用写 Python |
+| `pipeline.py` | 不改 | 通用引擎，所有平台共享 |
+| `flows.py` | 不改 | Prefect 编排，自动发现所有平台的模块 |
+| `aw_h618.py` | 不改（可选） | CocoIndex CLI 兼容入口，如果在 Prefect 里管就不需要动 |
+
+换平台 → 在 `platforms.yaml` 加一个块，Prefect Web UI 自动识别。
 
 ## 如何适配自己的 AOSP 场景
 
-### 1. 定义你的大模块
+### 1. 定义你的平台和模块
 
-编辑 `aw_h618.py` 中的 module 定义。每个模块用 glob 圈定代码范围：
+编辑 `platforms.yaml`，每个平台用 YAML 块定义：
 
-```python
-BSP = ModuleConfig(
-    name="BSP",
-    code_globs=["**/kernel/**", "**/hardware/**", "**/device/**", "**/vendor/**"],
-    wiki_dir="bsp",
-    description="板级支持包",
-)
-# 可以自由增加：AUDIO、CAMERA、MODEM 等你自己的划分方式
+```yaml
+# platforms.yaml
+platforms:
+  my_chip:
+    aosp_root: /path/to/aosp
+    wiki_root: ./my_wiki
+    modules:
+      - name: BSP
+        code_globs:
+          - "**/kernel/**"
+          - "**/hardware/**"
+          - "**/device/**"
+          - "**/vendor/**"
+        wiki_dir: bsp
+        description: "板级支持包"
+      # 可自由增加：AUDIO、CAMERA、MODEM 等你自己的划分方式
 ```
 
-### 2. 指向你的代码和 Wiki 根目录
+### 2. 创建 Python 入口（可选，CLI 兼容）
 
-编辑 `aw_h618.py` 顶部：
+如果需要 `cocoindex update` CLI 兼容，复制 `aw_h618.py` → `my_chip.py`，改 `PROJECT` 常量指向你的平台名即可。
 
-```python
-PROJECT = "aw_h618"
-AOSP_ROOT = pathlib.Path("/your/aosp")       # ← AOSP 源码根
-WIKI_ROOT = pathlib.Path("/your/wiki")        # ← Wiki 根（含 bsp/ app/ 子目录）
-```
+如果全部走 Prefect Web UI，这步可以跳过——`flows.py` 会自动从 `platforms.yaml` 读所有平台配置。
 
 Wiki 目录约定：
 
@@ -628,8 +657,27 @@ wiki_root/
 
 ### 3. 日常使用流程
 
+**方式一：Prefect Web UI（推荐）**
+
 ```bash
 # ① 启动 Qdrant（首次或重启后）
+docker run -d -p 6333:6333 -p 6334:6334 qdrant/qdrant
+
+# ② 启动 Prefect Web UI（远程开发用实际 IP，不能用 0.0.0.0）
+prefect config set PREFECT_SERVER_API_HOST=192.168.3.66
+prefect config set PREFECT_API_URL=http://192.168.3.66:4200/api
+prefect server start        # → http://192.168.3.66:4200
+
+# ③ 在 Web UI 中选择 flow、填参数、一键触发
+#    - index-module: project=aw_h618, module_name=BSP
+#    - index-platform: project=aw_h618
+#    - 实时看日志和进度，跑完自动记录历史
+```
+
+**方式二：CLI（兼容旧流程）**
+
+```bash
+# ① 启动 Qdrant
 docker run -d -p 6333:6333 -p 6334:6334 qdrant/qdrant
 
 # ② 今天学 BSP — 只索引 BSP 模块
@@ -643,10 +691,10 @@ python aw_h618.py -m BSP "gpio 中断配置"
 cocoindex update aw_h618:aw_h618_app
 python aw_h618.py -m APP "activity 启动流程"
 
-# ⑤ 跨模块搜索（所有模块在同一个 Qdrant collection 中）
+# ⑤ 跨模块搜索
 python aw_h618.py "亮度调节 backlight"
 
-# ⑥ 新芯片/新厂商来了 — 复制 aw_h618.py → mtk_h618.py，改三行常量
+# ⑥ 新芯片来了 — 编辑 platforms.yaml 加一个块
 cocoindex update mtk_h618:mtk_h618_bsp
 ```
 
@@ -746,7 +794,7 @@ client.create_collection(
 | **语义搜索** | ✅ embedding + FP16 | ✅ embedding | ❌ | ❌ |
 | **代码+文档混合** | ✅ 统一向量空间 | ❌ 仅代码 | ❌ | ❌ |
 | **大模块作用域** | ✅ module 字段 + glob | ❌ | ❌ | ❌ |
-| **按模块选择性索引** | ✅ COCOINDEX_MODULES=BSP | ❌ | N/A | ❌ |
+| **按模块选择性索引** | ✅ 独立 App，每个模块单独跑 | ❌ | N/A | ❌ |
 | **LLM 定制** | ✅ 完全可控 prompt | ❌ | ❌ | ❌ |
 | **企业级扩展** | ✅ Qdrant 水平扩展 | ❌ | N/A | ❌ |
 | **上手成本** | 中（需 Python + Docker） | 低 | 最低 | 中 |
@@ -758,6 +806,7 @@ client.create_collection(
 | 组件 | 用途 | 类型 |
 |------|------|------|
 | CocoIndex | 管线引擎（增量、memo、声明式 API） | 框架 |
+| Prefect | Web UI 编排 + 触发 + 进度监控 + 运行历史 | 运维 |
 | Qdrant | 向量存储 + FP16 精度 + sparse IDF（gRPC） | 存储 |
 | BGE-M3 | 1024-dim 中英双语 + 代码嵌入 + sparse tokenizer | ML |
 | tree-sitter (RecursiveSplitter) | 代码 AST 感知切分 | 解析 |

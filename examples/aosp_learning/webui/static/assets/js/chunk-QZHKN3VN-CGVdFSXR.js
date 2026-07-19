@@ -1,0 +1,1 @@
+import{xa as s}from"./index-CORpNa3x.js";import{Bt as r,Vt as a}from"./src-Cv0uCF44.js";var t,e,_=s((()=>{a(),e=(t=class{constructor(i){this.init=i,this.records=this.init()}reset(){this.records=this.init()}},r(t,"ImperativeState"),t)}));export{_ as n,e as t};

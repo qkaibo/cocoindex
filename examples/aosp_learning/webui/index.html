@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AOSP Learning Console</title>
+  <script src="https://unpkg.com/vue@3.4.0/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/naive-ui@2.44.1/dist/index.js"></script>
+  <style>
+    :root { --app-bg: #f5f6fa; }
+    body { margin: 0; background: var(--app-bg); font-family: system-ui; }
+    .tab-content { padding: 24px; max-width: 1000px; margin: 0 auto; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .auto-refresh { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 13px; color: #888; }
+    .toast { position:fixed; top:20px; right:20px; color:#fff; padding:10px 20px; border-radius:6px; z-index:9999; font-size:14px; }
+  </style>
+</head>
+<body>
+<div id="app">
+<n-config-provider :locale="zhCN" :theme-overrides="themeOverrides">
+<n-message-provider>
+<n-layout style="height:100vh" has-sider>
+<n-layout-sider bordered width="200">
+  <div style="padding:20px 16px;font-size:18px;font-weight:700;color:#2080f0">🧠 AOSP 学习</div>
+  <n-menu :value="activeTab" :options="menuOpts" @update:value="activeTab=$event"/>
+  <div style="position:absolute;bottom:16px;left:16px;font-size:12px;color:#999">v1.0 · {{projectId}}</div>
+</n-layout-sider>
+<n-layout-content>
+
+<!-- ═══ 配置 ═══ -->
+<div v-show="activeTab==='config'" class="tab-content">
+<n-h2>模块配置</n-h2>
+<n-form label-placement="left" label-width="100">
+<n-form-item label="芯片项目">
+<n-input v-model:value="cfg.project" placeholder="aw_h618"/>
+</n-form-item>
+<n-form-item label="学习模块">
+<n-checkbox-group v-model:value="cfg.modules">
+<n-space><n-checkbox v-for="m in allModules" :key="m.name" :value="m.name" :label="m.name"/></n-space>
+</n-checkbox-group>
+</n-form-item>
+<n-divider>运行时参数</n-divider>
+<n-form-item label="线程池大小"><n-input-number v-model:value="cfg.max_workers" :min="8" :max="1024"/></n-form-item>
+<n-form-item label="超时(秒)"><n-input-number v-model:value="cfg.timeout" :min="30" :max="3600"/></n-form-item>
+<n-form-item label="最大并发"><n-input-number v-model:value="cfg.max_inflight" :min="256" :max="16384"/></n-form-item>
+</n-form>
+<n-space style="margin-top:16px">
+<n-button type="primary" @click="saveConfig" :loading="saving">保存配置</n-button>
+<n-button @click="loadConfig">恢复</n-button>
+</n-space>
+</div>
+
+<!-- ═══ 控制 ═══ -->
+<div v-show="activeTab==='control'" class="tab-content">
+<n-h2>学习控制</n-h2>
+<n-card style="margin-bottom:20px">
+<n-form-item label="当前模块">
+<n-select v-model:value="mod" :options="modOpts" style="width:280px"/>
+</n-form-item>
+<n-space style="margin-top:12px">
+<n-button type="success" @click="startIndex" :disabled="status.alive" :loading="starting">▶ 开始学习</n-button>
+<n-button type="error" @click="stopIndex" :disabled="!status.alive" :loading="stopping">■ 停止</n-button>
+</n-space>
+</n-card>
+
+<n-card title="运行状态">
+<n-space vertical>
+<n-tag :type="status.alive?'success':'default'" size="large">{{ status.alive ? '● 运行中' : '○ 空闲' }}</n-tag>
+<div v-if="status.alive">模块：<b>{{ status.module }}</b> &nbsp; PID：{{ status.pid }}</div>
+<div v-if="status.exit_code!==undefined && !status.alive">上次退出码：<b :style="{color:status.exit_code===0?'green':'red'}">{{ status.exit_code }}</b></div>
+</n-space>
+</n-card>
+</div>
+
+<!-- ═══ 监控 ═══ -->
+<div v-show="activeTab==='monitor'" class="tab-content">
+<n-h2>学习进度</n-h2>
+<div class="auto-refresh"><n-switch v-model:value="autoRefresh" size="small"/> 自动刷新 <span v-if="autoRefresh">· {{cd}}s</span></div>
+
+<div class="stat-grid">
+<n-card size="small"><n-statistic label="总计" :value="stats.total"/></n-card>
+<n-card size="small"><n-statistic label="已完成" :value="stats.added"/></n-card>
+<n-card size="small"><n-statistic label="处理中" :value="stats.in_flight"/></n-card>
+<n-card size="small"><n-statistic label="耗时" :value="fmt(stats.elapsed)"/></n-card>
+</div>
+
+<n-progress type="line" :percentage="pct" indicator-placement="inside" :height="28"
+  :status="status.alive?'default':'success'" style="margin-bottom:24px"/>
+
+<n-divider>GPU 状态</n-divider>
+<div class="stat-grid">
+<n-card size="small"><n-statistic label="GPU 利用率" :value="gpu.util+'%'"/></n-card>
+<n-card size="small"><n-statistic label="显存" :value="gpu.mem_used+' / '+gpu.mem_total+' MiB'"/></n-card>
+<n-card size="small"><n-statistic label="温度" :value="gpu.temp+'°C'"/></n-card>
+<n-card size="small"><n-statistic label="功耗" :value="gpu.power+'W'"/></n-card>
+</div>
+</div>
+
+</n-layout-content>
+</n-layout>
+</n-message-provider>
+</n-config-provider>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, onMounted, onUnmounted, watch } = Vue;
+const N = window.naive;
+
+function toast(msg, type) {
+  const el = document.createElement('div');
+  const colors = { success: '#18a058', error: '#d03050', info: '#2080f0' };
+  el.className = 'toast';
+  el.style.background = colors[type] || '#333';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+const app = createApp({
+  setup() {
+    const zhCN = N.zhCN;
+    const themeOverrides = { common: { primaryColor: '#2080f0', borderRadius: '6px' } };
+
+    // tab
+    const activeTab = ref('config');
+    const menuOpts = [{label:'配置',key:'config'},{label:'控制',key:'control'},{label:'监控',key:'monitor'}];
+
+    // config
+    const cfg = reactive({ project:'aw_h618', modules:['BSP'], max_workers:256, timeout:300, max_inflight:4096 });
+    const allModules = ref([]);
+    const saving = ref(false);
+
+    async function loadConfig() {
+      try { const r=await fetch('/api/config'); const d=await r.json();
+      cfg.project=d.project; cfg.modules=d.modules||['BSP'];
+      cfg.max_workers=d.runtime?.max_workers||256; cfg.timeout=d.runtime?.timeout||300; cfg.max_inflight=d.runtime?.max_inflight||4096;
+      } catch(e) { console.error(e); }
+    }
+    async function loadModules() {
+      try { const r=await fetch('/api/modules'); allModules.value=await r.json(); } catch(e) { console.error(e); }
+    }
+    async function saveConfig() {
+      saving.value=true;
+      try {
+        await fetch('/api/config', { method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ project:cfg.project, modules:cfg.modules, activeModule:cfg.modules[0]||'BSP',
+            runtime:{ max_workers:cfg.max_workers, timeout:cfg.timeout, max_inflight:cfg.max_inflight }}) });
+        toast('配置已保存','success');
+      } catch(e){ toast('保存失败: '+e.message,'error'); }
+      finally { saving.value=false; }
+    }
+
+    // control
+    const mod = ref('BSP');
+    const modOpts = computed(()=> allModules.value.map(m=>({label:`${m.name} — ${m.description}`,value:m.name})));
+    const status = reactive({ alive:false, module:'', pid:0, exit_code:undefined });
+    const starting = ref(false), stopping = ref(false);
+
+    async function startIndex() {
+      starting.value=true;
+      try {
+        const r=await fetch('/api/index/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({module:mod.value})});
+        if(!r.ok){const e=await r.json();throw new Error(e.detail);}
+        const d=await r.json();
+        status.alive=true; status.module=d.module; status.pid=d.pid;
+        toast(`${d.module} 已启动 (PID ${d.pid})`,'success');
+        startSSE(); activeTab.value='monitor';
+      } catch(e){ toast('启动失败: '+e.message,'error'); }
+      finally { starting.value=false; }
+    }
+    async function stopIndex() {
+      stopping.value=true;
+      try { await fetch('/api/index/stop',{method:'POST'}); status.alive=false; toast('已停止','info'); }
+      catch(e){ toast('停止失败: '+e.message,'error'); }
+      finally { stopping.value=false; }
+    }
+
+    // stats
+    const stats = reactive({ total:0, in_flight:0, added:0, elapsed:0 });
+    const pct = computed(()=> stats.total===0 ? 0 : Math.round(stats.added/stats.total*100));
+    function fmt(s) { const m=Math.floor(s/60); return `${m}m ${Math.floor(s%60)}s`; }
+
+    // GPU
+    const gpu = reactive({ util:'-', mem_used:'-', mem_total:'-', temp:'-', power:'-' });
+    async function fetchGPU() {
+      try { const r=await fetch('/api/gpu'); const d=await r.json(); if(!d.error) Object.assign(gpu,d); } catch(e){}
+    }
+
+    // polling
+    const autoRefresh = ref(true);
+    const cd = ref(3);
+    let refreshTimer=null, cdTimer=null;
+
+    async function fetchStatus() {
+      try { const r=await fetch('/api/index/status'); const d=await r.json();
+        status.alive=d.process_alive; status.module=d.module||''; status.pid=d.pid||0;
+        if(d.exit_code!==undefined)status.exit_code=d.exit_code;
+        if(d.total)Object.assign(stats,d);
+      } catch(e){}
+    }
+    function startPolling() {
+      stopPolling(); cd.value=3;
+      cdTimer=setInterval(()=>{ cd.value=Math.max(1,cd.value-1); },1000);
+      refreshTimer=setInterval(async()=>{ if(autoRefresh.value){ await fetchStatus(); await fetchGPU(); cd.value=3; } },3000);
+    }
+    function stopPolling() { if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;} if(cdTimer){clearInterval(cdTimer);cdTimer=null;} }
+    watch(autoRefresh, v=>{ if(v){ fetchStatus(); fetchGPU(); cd.value=3; } });
+
+    // SSE
+    let sse=null;
+    function startSSE() {
+      stopSSE();
+      sse=new EventSource('/api/index/progress');
+      sse.onmessage=e=>{ const d=JSON.parse(e.data); Object.assign(stats,d); status.alive=d.process_alive; if(!d.process_alive&&!d.running)stopSSE(); };
+      sse.onerror=()=>stopSSE();
+    }
+    function stopSSE() { if(sse){sse.close();sse=null;} }
+
+    onMounted(async()=>{ await loadConfig(); await loadModules(); await fetchStatus(); await fetchGPU(); startPolling(); if(status.alive)startSSE(); });
+    onUnmounted(()=>{ stopPolling(); stopSSE(); });
+
+    const projectId = computed(()=>cfg.project);
+
+    return { zhCN, themeOverrides, activeTab, menuOpts,
+      cfg, allModules, saving, loadConfig, saveConfig,
+      mod, modOpts, status, starting, stopping, startIndex, stopIndex,
+      stats, pct, fmt, gpu, autoRefresh, cd, projectId };
+  }
+});
+
+app.use(N);
+app.mount('#app');
+</script>
+</body>
+</html>

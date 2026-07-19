@@ -9,6 +9,9 @@ dependencies = [
     "pydantic",
     "numpy",
     "python-dotenv>=1.0.1",
+    "prefect>=3.0",
+    "pyyaml>=6.0",
+    "streamlit>=1.28",
 ]
 
 [tool.setuptools]

@@ -1,0 +1,1 @@
+import{xa as t}from"./index-CORpNa3x.js";import{Bt as e,Vt as o}from"./src-Cv0uCF44.js";function n(i,c){i.accDescr&&c.setAccDescription?.(i.accDescr),i.accTitle&&c.setAccTitle?.(i.accTitle),i.title&&c.setDiagramTitle?.(i.title)}var r=t((()=>{o(),e(n,"populateCommonDb")}));export{n,r as t};
