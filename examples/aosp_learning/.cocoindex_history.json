@@ -1,0 +1,20 @@
+{
+  "BSP": {
+    "status": "completed",
+    "total": 109141,
+    "added": 492704,
+    "elapsed": 0,
+    "exit_code": 0,
+    "time": "2026-07-19T17:00:00",
+    "complete": true
+  },
+  "APP": {
+    "status": "error",
+    "total": 2058,
+    "added": 20,
+    "elapsed": 369.6,
+    "exit_code": -15,
+    "time": "2026-07-19T22:41:13.256901",
+    "complete": false
+  }
+}

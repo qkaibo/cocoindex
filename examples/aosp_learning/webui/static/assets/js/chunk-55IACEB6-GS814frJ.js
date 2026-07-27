@@ -1,0 +1,1 @@
+import{Ca as s}from"./index-DXLAPDfS.js";import{Bt as i,Vt as o,jt as t,t as m}from"./src-C1yku_wW.js";var r,l=s((()=>{o(),m(),r=i((a,e)=>{let n;return e==="sandbox"&&(n=t("#i"+a)),(e==="sandbox"?t(n.nodes()[0].contentDocument.body):t("body")).select(`[id="${a}"]`)},"getDiagramElement")}));export{l as n,r as t};

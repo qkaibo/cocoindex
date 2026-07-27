@@ -1,1 +1,0 @@
-import{xa as i}from"./index-BFdftfa0.js";function e(t){if(t==null||t==="")return null;const n=Number(t);return Number.isFinite(n)?Math.min(400,Math.max(48,Math.round(n))):null}function o(t){return t<=768}var r,u,_,I=i((()=>{r=768,u=48,_=400}));export{I as n,o as r,e as t};

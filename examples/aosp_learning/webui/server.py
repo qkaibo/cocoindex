@@ -41,15 +41,17 @@ import yaml
 # ── Cached file counts ────────────────────────────────────────────────────
 FILE_COUNTS_CACHE = PROJECT_DIR / ".cocoindex_file_counts.json"
 
-def _count_module_files(platform: str = "") -> dict[str, int]:
+def _count_module_files(platform: str = "", chip: str = "") -> dict[str, int]:
     """扫描 AOSP 源目录，统计每个模块的源文件数。"""
     try:
-        with open(PROJECT_DIR / "platforms.yaml") as f:
-            platforms = yaml.safe_load(f)
-        key = platform or load_config().get("platform", "aw_h618")
-        cfg = platforms["platforms"][key]
-        aosp_root = Path(cfg["aosp_root"])
-        modules = cfg["modules"]
+        cfg = load_config()
+        p = platform or cfg.get("platform", "allwinner")
+        c = chip or cfg.get("chip", "h618")
+        chip_cfg = _get_chip_config(p, c)
+        if not chip_cfg:
+            return dict(MODULE_FILE_COUNTS)
+        aosp_root = Path(chip_cfg["aosp_root"])
+        modules = chip_cfg.get("modules", [])
     except Exception:
         return dict(MODULE_FILE_COUNTS)  # fallback
 
@@ -101,62 +103,115 @@ HERMES_BACKEND = "http://127.0.0.1:8648"
 
 # ── Default config ───────────────────────────────────────────────────────
 DEFAULT_CONFIG = {
-    "platform": "aw_h618",
+    "platform": "allwinner",
+    "chip": "h618",
     "modules": ["BSP", "FRAMEWORK", "APP"],
     "activeModule": "BSP",
     "runtime": {"max_workers": 256, "timeout": 300, "max_inflight": 4096},
 }
 
-# ── 平台 & 模块：从 platforms.yaml 动态加载 ──────────────────────────────
-_platforms_cache: dict | None = None
+# ── 平台 & 芯片：从 platforms/ 目录扫描 ────────────────────────────────────
+PLATFORMS_DIR = PROJECT_DIR / "platforms"
 
-def _load_platforms() -> dict:
-    """加载 platforms.yaml，缓存结果."""
-    global _platforms_cache
-    if _platforms_cache is not None:
-        return _platforms_cache
-    try:
-        with open(PROJECT_DIR / "platforms.yaml") as f:
-            data = yaml.safe_load(f)
-        _platforms_cache = data if data else {}
-        return _platforms_cache
-    except Exception as e:
-        print(f"[warn] 加载 platforms.yaml 失败: {e}")
-        _platforms_cache = {}
-        return {}
+def _load_user_chips() -> set[str]:
+    """加载用户创建的芯片列表（跟踪用户添加的芯片，后续可扩展为持久化存储）."""
+    # 当前简化实现：返回 builtin 集合，用户芯片通过 source 字段区分
+    # 后续可改为从 .cocoindex_user_chips.json 加载
+    return set()
 
-def get_available_platforms() -> list[dict]:
-    """返回可选平台列表（platforms.yaml + 用户自定义）."""
-    data = _load_platforms()
-    builtin = data.get("platforms", {})
-    user = _load_user_platforms()
-    # 合并：用户平台覆盖同名内置平台
-    all_platforms = {**builtin, **user}
+def _scan_platforms() -> list[dict]:
+    """扫描 platforms/ 目录，返回 [{name, chips: [{name, aosp_root, wiki_root, modules, source}]}]."""
     result = []
-    for key, cfg in all_platforms.items():
-        result.append({
-            "name": key,
-            "aosp_root": cfg.get("aosp_root", ""),
-            "wiki_root": cfg.get("wiki_root", ""),
-            "modules": [m["name"] for m in cfg.get("modules", [])],
-            "source": "user" if key in user else "builtin",
-        })
+    if not PLATFORMS_DIR.is_dir():
+        return result
+    user_chips = _load_user_chips()
+    for plat_dir in sorted(PLATFORMS_DIR.iterdir()):
+        if not plat_dir.is_dir() or plat_dir.name.startswith("."):
+            continue
+        chips = []
+        for yf in sorted(plat_dir.glob("*.yaml")):
+            try:
+                cfg = yaml.safe_load(yf.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(cfg, dict):
+                continue
+            chip_name = cfg.get("name", yf.stem)
+            source = "user" if f"{plat_dir.name}/{chip_name}" in user_chips else "builtin"
+            chips.append({
+                "name": chip_name,
+                "aosp_root": cfg.get("aosp_root", ""),
+                "wiki_root": cfg.get("wiki_root", ""),
+                "modules": cfg.get("modules", []),
+                "source": source,
+            })
+        result.append({"name": plat_dir.name, "chips": chips,
+                       "source": "user" if plat_dir.name in user_chips else "builtin"})
     return result
 
-def get_modules_for_platform(platform: str) -> list[dict]:
-    """返回指定平台的模块列表."""
-    # 先查用户平台，再查内置
-    user = _load_user_platforms()
-    if platform in user:
-        return user[platform].get("modules", [])
-    data = _load_platforms()
-    platforms = data.get("platforms", {})
-    cfg = platforms.get(platform, {})
-    return cfg.get("modules", [])
+def _get_chip_config(platform: str, chip: str) -> dict | None:
+    """读取单个芯片的 YAML 配置."""
+    chip_path = PLATFORMS_DIR / platform / f"{chip}.yaml"
+    if not chip_path.exists():
+        return None
+    try:
+        return yaml.safe_load(chip_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return None
 
-def get_all_modules(platform: str) -> list[dict]:
-    """返回指定平台的所有模块（兼容旧 API）"""
-    return get_modules_for_platform(platform)
+def _save_chip_config(platform: str, chip: str, cfg: dict) -> None:
+    """保存芯片 YAML 配置."""
+    plat_dir = PLATFORMS_DIR / platform
+    plat_dir.mkdir(parents=True, exist_ok=True)
+    chip_path = plat_dir / f"{chip}.yaml"
+    chip_path.write_text(yaml.dump(cfg, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+
+def _delete_chip_config(platform: str, chip: str) -> bool:
+    """删除芯片 YAML 文件，返回是否成功."""
+    chip_path = PLATFORMS_DIR / platform / f"{chip}.yaml"
+    if not chip_path.exists():
+        return False
+    chip_path.unlink()
+    # 如果平台目录为空，也删除目录
+    plat_dir = PLATFORMS_DIR / platform
+    if plat_dir.is_dir() and not list(plat_dir.glob("*.yaml")):
+        try:
+            plat_dir.rmdir()
+        except OSError:
+            pass
+    return True
+
+def _delete_platform_dir(platform: str) -> bool:
+    """删除平台目录（仅在无芯片时）."""
+    plat_dir = PLATFORMS_DIR / platform
+    if not plat_dir.is_dir():
+        return False
+    if list(plat_dir.glob("*.yaml")):
+        return False  # 有芯片不能删
+    plat_dir.rmdir()
+    return True
+
+def get_available_platforms() -> list[dict]:
+    """返回平台树结构（供前端渲染树形导航）."""
+    return _scan_platforms()
+
+def get_modules_for_chip(platform: str, chip: str) -> list[dict]:
+    """返回指定芯片的模块列表."""
+    cfg = _get_chip_config(platform, chip)
+    return cfg.get("modules", []) if cfg else []
+
+def get_chip_detail(platform: str, chip: str) -> dict | None:
+    """返回芯片完整配置."""
+    cfg = _get_chip_config(platform, chip)
+    if not cfg:
+        return None
+    return {
+        "name": cfg.get("name", chip),
+        "aosp_root": cfg.get("aosp_root", ""),
+        "wiki_root": cfg.get("wiki_root", ""),
+        "modules": cfg.get("modules", []),
+        "platform": platform,
+    }
 
 
 # ── Runtime state ────────────────────────────────────────────────────────
@@ -266,8 +321,8 @@ async def _get_module_index_counts() -> dict[str, int]:
         return _qdrant_cache
 
     cfg = load_config()
-    platform = cfg.get("platform", "aw_h618")
-    collection = f"aosp_{platform}"
+    chip = cfg.get("chip", "h618")
+    collection = f"aosp_{chip}"
 
     async def _count(module: str) -> tuple[str, int]:
         try:
@@ -347,13 +402,27 @@ app.add_middleware(
 )
 
 # ── Models ───────────────────────────────────────────────────────────────
+class ModuleInfo(BaseModel):
+    name: str
+    description: str = ""
+    code_globs: list[str] = []
+    wiki_dir: str = ""
+
+class ChipCreateRequest(BaseModel):
+    platform: str
+    name: str
+    aosp_root: str = ""
+    wiki_root: str = "./aosp_wiki"
+    modules: list[ModuleInfo] = []
+
 class RuntimeConfig(BaseModel):
     max_workers: int = 256
     timeout: int = 300
     max_inflight: int = 4096
 
 class AppConfig(BaseModel):
-    platform: str = "aw_h618"
+    platform: str = "allwinner"
+    chip: str = "h618"
     modules: list[str] = ["BSP", "FRAMEWORK", "APP"]
     activeModule: str = "BSP"
     runtime: RuntimeConfig = RuntimeConfig()
@@ -376,67 +445,61 @@ async def update_config(cfg: AppConfig):
 async def list_platforms():
     return get_available_platforms()
 
-# ── 平台管理：CRUD 持久化到 .cocoindex_platforms.json ──────────────────
-PLATFORMS_JSON = PROJECT_DIR / ".cocoindex_platforms.json"
+# ── 芯片管理：CRUD 直接操作 platforms/ 目录下的 YAML ──────────────────
+# 兼容旧的 .cocoindex_platforms.json（迁移后不再使用）
 
-def _load_user_platforms() -> dict:
-    """加载用户自定义平台."""
-    if PLATFORMS_JSON.exists():
-        try:
-            with open(PLATFORMS_JSON) as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-def _save_user_platforms(data: dict) -> None:
-    with open(PLATFORMS_JSON, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-class PlatformCreate(BaseModel):
-    name: str
-    aosp_root: str
-    wiki_root: str = "./aosp_wiki"
-    modules: list[dict] = []  # [{name, code_globs, wiki_dir, description}]
-
-@app.post("/api/learning/platforms")
-async def create_platform(req: PlatformCreate):
-    data = _load_user_platforms()
-    if req.name in data:
-        raise HTTPException(400, f"平台 {req.name} 已存在")
-    data[req.name] = {
+@app.post("/api/learning/chips")
+async def create_chip(req: ChipCreateRequest):
+    """创建芯片配置 → platforms/{platform}/{chip}.yaml."""
+    chip_path = PLATFORMS_DIR / req.platform / f"{req.name}.yaml"
+    if chip_path.exists():
+        raise HTTPException(400, f"芯片 {req.platform}/{req.name} 已存在")
+    cfg = {
+        "name": req.name,
         "aosp_root": req.aosp_root,
         "wiki_root": req.wiki_root,
         "modules": req.modules,
     }
-    _save_user_platforms(data)
-    return {"status": "ok", "name": req.name}
+    _save_chip_config(req.platform, req.name, cfg)
+    return {"status": "ok", "platform": req.platform, "chip": req.name}
 
-@app.put("/api/learning/platforms/{name}")
-async def update_platform(name: str, req: PlatformCreate):
-    data = _load_user_platforms()
-    data[name] = {
+@app.put("/api/learning/chips/{platform}/{chip}")
+async def update_chip(platform: str, chip: str, req: ChipCreateRequest):
+    """更新芯片配置."""
+    chip_path = PLATFORMS_DIR / platform / f"{chip}.yaml"
+    if not chip_path.exists():
+        raise HTTPException(404, f"芯片 {platform}/{chip} 不存在")
+    cfg = {
+        "name": chip,
         "aosp_root": req.aosp_root,
         "wiki_root": req.wiki_root,
         "modules": req.modules,
     }
-    _save_user_platforms(data)
-    return {"status": "ok", "name": name}
+    _save_chip_config(platform, chip, cfg)
+    return {"status": "ok", "platform": platform, "chip": chip}
 
-@app.delete("/api/learning/platforms/{name}")
-async def delete_platform(name: str):
-    data = _load_user_platforms()
-    if name not in data:
-        raise HTTPException(404, f"平台 {name} 不存在")
-    del data[name]
-    _save_user_platforms(data)
-    return {"status": "ok", "name": name}
+@app.delete("/api/learning/chips/{platform}/{chip}")
+async def delete_chip(platform: str, chip: str):
+    """删除芯片配置."""
+    if not _delete_chip_config(platform, chip):
+        raise HTTPException(404, f"芯片 {platform}/{chip} 不存在")
+    return {"status": "ok", "platform": platform, "chip": chip}
+
+@app.get("/api/learning/chips/{platform}/{chip}")
+async def get_chip(platform: str, chip: str):
+    """获取芯片完整配置."""
+    detail = get_chip_detail(platform, chip)
+    if not detail:
+        raise HTTPException(404, f"芯片 {platform}/{chip} 不存在")
+    return detail
 
 @app.get("/api/learning/modules")
-async def list_modules(platform: str = ""):
+async def list_modules(platform: str = "", chip: str = ""):
+    """返回指定芯片的模块列表."""
     cfg = load_config()
-    p = platform or cfg.get("platform", "aw_h618")
-    return get_modules_for_platform(p)
+    p = platform or cfg.get("platform", "allwinner")
+    c = chip or cfg.get("chip", "h618")
+    return get_modules_for_chip(p, c)
 
 @app.post("/api/learning/refresh-file-counts")
 async def refresh_file_counts():
@@ -508,10 +571,11 @@ async def start_index(req: IndexStartRequest):
         if ext["module"] == req.module and _get_proc_info(ext["pid"])["alive"]:
             raise HTTPException(400, f"已有一个外部 {req.module} 索引在运行 (PID {ext['pid']})")
     cfg = load_config()
-    platform = cfg.get("platform", "aw_h618")
+    platform = cfg.get("platform", "allwinner")
+    chip = cfg.get("chip", "h618")
     runtime = cfg["runtime"]
     module = req.module
-    valid = [m["name"] for m in get_modules_for_platform(platform)]
+    valid = [m["name"] for m in get_modules_for_chip(platform, chip)]
     if module not in valid:
         raise HTTPException(400, f"未知模块: {module}，可选: {valid}")
     env = os.environ.copy()
@@ -521,7 +585,8 @@ async def start_index(req: IndexStartRequest):
         "HF_HUB_OFFLINE": "1",
         "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
     })
-    cmd = f"source {VENV_ACTIVATE} && cocoindex update {platform}:{platform}_{module.lower()} 2>&1"
+    # 兼容旧格式: platform:platform_module
+    cmd = f"source {VENV_ACTIVATE} && cocoindex update {chip}:{chip}_{module.lower()} 2>&1"
     _proc = await asyncio.create_subprocess_exec(
         "bash", "-c", cmd,
         cwd=str(PROJECT_DIR), env=env,

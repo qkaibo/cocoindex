@@ -1,0 +1,11 @@
+{
+  "platform": "allwinner",
+  "chip": "h618",
+  "modules": ["BSP", "FRAMEWORK", "APP"],
+  "activeModule": "BSP",
+  "runtime": {
+    "max_workers": 256,
+    "timeout": 300,
+    "max_inflight": 4096
+  }
+}

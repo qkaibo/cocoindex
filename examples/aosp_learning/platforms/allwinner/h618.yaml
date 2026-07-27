@@ -1,0 +1,27 @@
+# 全志 H618 芯片 AOSP 索引配置
+name: h618
+aosp_root: /CM/work/h618/android12/H618-android-20230427-v1.1
+wiki_root: ./aosp_wiki
+modules:
+  - name: BSP
+    description: "板级支持包：kernel驱动(H618 longan) + DTS + HAL + vendor配置"
+    code_globs:
+      - "**/hardware/**"
+      - "**/device/**"
+      - "**/vendor/**"
+      - "**/longan/**"
+    wiki_dir: bsp
+
+  - name: FRAMEWORK
+    description: "Android Framework层：system_server, JNI, 系统服务"
+    code_globs:
+      - "**/frameworks/**"
+      - "**/system/**"
+    wiki_dir: framework
+
+  - name: APP
+    description: "应用层：Settings, Launcher, CTS测试"
+    code_globs:
+      - "**/packages/**"
+      - "**/cts/**"
+    wiki_dir: app

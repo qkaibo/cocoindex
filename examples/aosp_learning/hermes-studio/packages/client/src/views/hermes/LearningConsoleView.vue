@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed, h } from "vue";
 import {
   NCard, NTabs, NTabPane, NButton, NSwitch, NInputNumber,
   NTag, NProgress, NStatistic, NGrid, NGi, NSelect,
-  NSpace, NSpin, NLog, NModal, NInput,
+  NSpace, NSpin, NLog, NModal, NInput, NDivider, NEmpty, NTree,
   useMessage,
 } from "naive-ui";
+import type { TreeOption } from "naive-ui";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -19,6 +20,14 @@ interface ModuleInfo {
   name: string;
   description: string;
   code_globs: string[];
+  wiki_dir: string;
+}
+
+interface ModuleFormData {
+  name: string;
+  description: string;
+  code_globs: string[];
+  wiki_dir: string;
 }
 
 interface RuntimeConfig {
@@ -27,17 +36,24 @@ interface RuntimeConfig {
   max_inflight: number;
 }
 
-interface PlatformInfo {
+interface ChipInfo {
   name: string;
   aosp_root: string;
   wiki_root: string;
-  modules: string[];
-  source?: string;
+  modules: ModuleInfo[];
+  source: string;
+  platform: string;
 }
 
+interface PlatformTreeNode {
+  name: string;
+  chips: ChipInfo[];
+  source: string;
+}
 
 interface AppConfig {
   platform: string;
+  chip: string;
   modules: string[];
   activeModule: string;
   runtime: RuntimeConfig;
@@ -94,14 +110,39 @@ const loading = ref(false);
 
 // Config state
 const config = ref<AppConfig>({
-  platform: "aw_h618",
+  platform: "allwinner",
+  chip: "h618",
   modules: ["BSP", "FRAMEWORK", "APP"],
   activeModule: "BSP",
   runtime: { max_workers: 256, timeout: 300, max_inflight: 4096 },
 });
 const allModules = ref<ModuleInfo[]>([]);
-const platforms = ref<PlatformInfo[]>([]);
 const configLoading = ref(false);
+
+// ── 树形导航状态 ──────────────────────────────────────────────────────
+const platformTree = ref<PlatformTreeNode[]>([]);
+const treeData = ref<TreeOption[]>([]);
+const selectedChipKey = ref<string>("");
+const currentChipDetail = ref<ChipInfo | null>(null);
+const treeLoading = ref(false);
+
+// 芯片编辑状态
+const showChipForm = ref(false);
+const editingChipKey = ref<string>("");  // "platform/chip"
+const chipForm = ref<{
+  platform: string;
+  name: string;
+  aosp_root: string;
+  wiki_root: string;
+  modules: ModuleFormData[];
+}>({
+  platform: "allwinner",
+  name: "",
+  aosp_root: "",
+  wiki_root: "./aosp_wiki",
+  modules: [],
+});
+const chipFormLoading = ref(false);
 
 // Control state
 const selectedModule = ref<string>("BSP");
@@ -218,7 +259,13 @@ async function fetchConfig() {
   configLoading.value = true;
   try {
     const res = await fetch(`${API_BASE}/api/learning/config`);
-    config.value = await res.json();
+    config.value = { ...config.value, ...await res.json() };
+    // 有保存的配置时自动选中对应芯片
+    if (config.value.platform && config.value.chip) {
+      selectedChipKey.value = `${config.value.platform}/${config.value.chip}`;
+      await loadChipDetail(config.value.platform, config.value.chip);
+      await fetchModulesForChip(config.value.platform, config.value.chip);
+    }
   } catch (e) {
     message.error(t("learningConsole.configFetchFailed"));
   } finally {
@@ -226,31 +273,74 @@ async function fetchConfig() {
   }
 }
 
-async function fetchModules(platform?: string) {
+async function fetchModulesForChip(platform: string, chip: string) {
   try {
-    const p = platform || config.value.platform;
-    const res = await fetch(`${API_BASE}/api/learning/modules?platform=${p}`);
+    const res = await fetch(`${API_BASE}/api/learning/modules?platform=${platform}&chip=${chip}`);
     allModules.value = await res.json();
-  } catch (e) {
-    // silent
-  }
+  } catch (e) { /* silent */ }
 }
 
-async function fetchPlatforms() {
+// ── 平台树 ────────────────────────────────────────────────────────────
+function buildTreeData(tree: PlatformTreeNode[]): TreeOption[] {
+  return tree.map(plat => {
+    if (plat.chips.length === 0) {
+      return {
+        key: plat.name,
+        label: `📁 ${plat.name}`,
+        isLeaf: true,
+        suffix: () => h(NTag, { type: "warning", size: "tiny", bordered: false }, { default: () => "空" }),
+      };
+    }
+    return {
+      key: plat.name,
+      label: `📁 ${plat.name}`,
+      children: plat.chips.map(chip => {
+        const key = `${plat.name}/${chip.name}`;
+        return {
+          key,
+          label: () => {
+            const sel = selectedChipKey.value === key;
+            return h('span', sel ? { style: { fontWeight: '600' } } : { style: { color: '#aaa' } }, `${sel ? '◆' : '◇'} ${chip.name}`);
+          },
+          isLeaf: true,
+        };
+      }),
+    };
+  });
+}
+
+async function fetchPlatformTree() {
+  treeLoading.value = true;
   try {
     const res = await fetch(`${API_BASE}/api/learning/platforms`);
-    platforms.value = await res.json();
-  } catch (e) {
-    // silent
+    const data: PlatformTreeNode[] = await res.json();
+    platformTree.value = data;
+    treeData.value = buildTreeData(data);
+    // 自动选中当前配置的芯片
+    if (config.value.platform && config.value.chip) {
+      selectedChipKey.value = `${config.value.platform}/${config.value.chip}`;
+    }
+  } catch (e) { /* silent */ } finally {
+    treeLoading.value = false;
   }
 }
 
-// 切换平台时刷新模块列表
-async function onPlatformChange(platform: string) {
+// ── 树选择 & 芯片详情 ─────────────────────────────────────────────────
+async function onTreeSelect(keys: string[], _opt: any) {
+  if (keys.length === 0) return;
+  const key = keys[0];
+  const parts = key.split("/");
+  if (parts.length !== 2) return;  // 只处理芯片节点
+
+  const [platform, chip] = parts;
+  selectedChipKey.value = key;
   config.value.platform = platform;
-  config.value.modules = [];
-  config.value.activeModule = "";
-  await fetchModules(platform);
+  config.value.chip = chip;
+  await Promise.all([
+    loadChipDetail(platform, chip),
+    fetchModulesForChip(platform, chip),
+  ]);
+  // 自动选中所有模块
   if (allModules.value.length > 0) {
     config.value.modules = allModules.value.map(m => m.name);
     config.value.activeModule = allModules.value[0].name;
@@ -258,57 +348,143 @@ async function onPlatformChange(platform: string) {
   }
 }
 
-// ── 平台管理 ──────────────────────────────────────────────────────────
-const showPlatformForm = ref(false);
-const editingPlatform = ref<string>("");
-const platformForm = ref({ name: "", aosp_root: "", wiki_root: "./aosp_wiki", modules_json: "" });
-
-function openNewPlatform() {
-  editingPlatform.value = "";
-  platformForm.value = { name: "", aosp_root: "", wiki_root: "./aosp_wiki", modules_json: "[]" };
-  showPlatformForm.value = true;
+async function loadChipDetail(platform: string, chip: string) {
+  try {
+    const res = await fetch(`${API_BASE}/api/learning/chips/${platform}/${chip}`);
+    currentChipDetail.value = await res.json();
+  } catch (e) {
+    // 从 treeData 中找
+    const plat = platformTree.value.find(p => p.name === platform);
+    const c = plat?.chips.find(ch => ch.name === chip);
+    if (c) currentChipDetail.value = c;
+  }
 }
 
-async function savePlatform() {
-  const body = {
-    name: platformForm.value.name,
-    aosp_root: platformForm.value.aosp_root,
-    wiki_root: platformForm.value.wiki_root,
-    modules: [
-      { name: "BSP", code_globs: ["**/hardware/**", "**/device/**", "**/vendor/**"], wiki_dir: "bsp", description: "板级支持包" },
-      { name: "FRAMEWORK", code_globs: ["**/frameworks/**", "**/system/**"], wiki_dir: "framework", description: "Framework层" },
-      { name: "APP", code_globs: ["**/packages/**", "**/cts/**"], wiki_dir: "app", description: "应用层" },
-    ],
+// ── 芯片管理 ──────────────────────────────────────────────────────────
+const DEFAULT_MODULES: ModuleFormData[] = [
+  { name: "BSP", description: "板级支持包", code_globs: ["**/hardware/**", "**/device/**", "**/vendor/**", "**/longan/**"], wiki_dir: "bsp" },
+  { name: "FRAMEWORK", description: "Android Framework层", code_globs: ["**/frameworks/**", "**/system/**"], wiki_dir: "framework" },
+  { name: "APP", description: "应用层", code_globs: ["**/packages/**", "**/cts/**"], wiki_dir: "app" },
+];
+
+function openNewChip() {
+  editingChipKey.value = "";
+  chipForm.value = {
+    platform: "allwinner",
+    name: "",
+    aosp_root: "",
+    wiki_root: "./aosp_wiki",
+    modules: DEFAULT_MODULES.map(m => ({ ...m, code_globs: [...m.code_globs] })),
   };
+  showChipForm.value = true;
+}
+
+async function openEditChip(platform: string, chip: string) {
+  editingChipKey.value = `${platform}/${chip}`;
+  chipForm.value = { platform, name: chip, aosp_root: "", wiki_root: "./aosp_wiki", modules: [] };
   try {
-    const method = editingPlatform.value ? "PUT" : "POST";
-    const url = editingPlatform.value
-      ? `${API_BASE}/api/learning/platforms/${editingPlatform.value}`
-      : `${API_BASE}/api/learning/platforms`;
+    const res = await fetch(`${API_BASE}/api/learning/chips/${platform}/${chip}`);
+    const detail = await res.json();
+    chipForm.value = {
+      platform,
+      name: chip,
+      aosp_root: detail.aosp_root || "",
+      wiki_root: detail.wiki_root || "./aosp_wiki",
+      modules: (detail.modules || []).map((m: any) => ({
+        name: m.name || "",
+        description: m.description || "",
+        code_globs: [...(m.code_globs || [])],
+        wiki_dir: m.wiki_dir || "",
+      })),
+    };
+  } catch (e) {
+    chipForm.value.modules = DEFAULT_MODULES.map(m => ({ ...m, code_globs: [...m.code_globs] }));
+  }
+  showChipForm.value = true;
+}
+
+function addModule() {
+  chipForm.value.modules.push({ name: "", description: "", code_globs: [], wiki_dir: "" });
+}
+
+function removeModule(idx: number) {
+  chipForm.value.modules.splice(idx, 1);
+}
+
+function _codeGlobsToText(globs: string[]): string {
+  return (globs || []).join("\n");
+}
+
+function _textToCodeGlobs(text: string): string[] {
+  return text.split("\n").map(s => s.trim()).filter(s => s);
+}
+
+async function saveChip() {
+  chipFormLoading.value = true;
+  try {
+    const body = {
+      platform: chipForm.value.platform,
+      name: chipForm.value.name,
+      aosp_root: chipForm.value.aosp_root,
+      wiki_root: chipForm.value.wiki_root,
+      modules: chipForm.value.modules.filter(m => m.name.trim()).map(m => ({
+        name: m.name.trim(),
+        description: m.description.trim(),
+        code_globs: m.code_globs.filter(g => g.trim()),
+        wiki_dir: m.wiki_dir.trim(),
+      })),
+    };
+    if (!body.name) { message.error("芯片名不能为空"); return; }
+    if (!body.platform) { message.error("平台名不能为空"); return; }
+    if (body.modules.length === 0) { message.error("至少需要一个模块"); return; }
+
+    const key = `${body.platform}/${body.name}`;
+    const method = editingChipKey.value ? "PUT" : "POST";
+    const url = editingChipKey.value
+      ? `${API_BASE}/api/learning/chips/${editingChipKey.value}`
+      : `${API_BASE}/api/learning/chips`;
     const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     if (res.ok) {
-      message.success(editingPlatform.value ? "平台已更新" : "平台已添加");
-      showPlatformForm.value = false;
-      await fetchPlatforms();
+      message.success(editingChipKey.value ? "芯片已更新" : "芯片已添加");
+      showChipForm.value = false;
+      await fetchPlatformTree();
+      // 刷新当前选中
+      if (editingChipKey.value === selectedChipKey.value) {
+        await loadChipDetail(body.platform, body.name);
+        await fetchModulesForChip(body.platform, body.name);
+      }
     } else {
       const err = await res.json();
       message.error(err.detail || "操作失败");
     }
   } catch (e: any) {
     message.error("操作失败: " + (e.message || ""));
+  } finally {
+    chipFormLoading.value = false;
   }
 }
 
-async function deletePlatform(name: string) {
+async function confirmDeleteChip(platform: string, chip: string) {
+  if (window.confirm(`确定要删除芯片 "${platform}/${chip}" 吗？此操作不可撤销。`)) {
+    await deleteChip(platform, chip);
+  }
+}
+
+async function deleteChip(platform: string, chip: string) {
   try {
-    const res = await fetch(`${API_BASE}/api/learning/platforms/${name}`, { method: "DELETE" });
+    const res = await fetch(`${API_BASE}/api/learning/chips/${platform}/${chip}`, { method: "DELETE" });
     if (res.ok) {
-      message.success(`平台 ${name} 已删除`);
-      await fetchPlatforms();
+      message.success(`芯片 ${chip} 已删除`);
+      if (`${platform}/${chip}` === selectedChipKey.value) {
+        selectedChipKey.value = "";
+        currentChipDetail.value = null;
+        allModules.value = [];
+      }
+      await fetchPlatformTree();
     }
   } catch (e: any) {
     message.error("删除失败");
@@ -425,7 +601,7 @@ function connectSSE() {
 
 // ── Lifecycle ──────────────────────────────────────────────────────────
 onMounted(async () => {
-  await Promise.all([fetchConfig(), fetchPlatforms(), fetchModules(), fetchStatus(), fetchGpu()]);
+  await Promise.all([fetchConfig(), fetchPlatformTree(), fetchStatus(), fetchGpu()]);
   connectSSE();
   gpuTimer = setInterval(fetchGpu, 3000);
 });
@@ -446,98 +622,100 @@ onUnmounted(() => {
   <div class="learning-console">
     <h2 class="page-title">{{ t("learningConsole.title") }}</h2>
 
-    <NTabs v-model:value="activeTab" type="line" animated>
-      <!-- ═══ Tab 1: 配置 ═══ -->
-      <NTabPane name="config" :tab="t('learningConsole.configTab')">
-        <NSpin :show="configLoading">
-          <NGrid :cols="2" :x-gap="16" :y-gap="16">
-            <!-- 平台选择 -->
-            <NGi :span="2">
-              <NCard :title="t('learningConsole.projectInfo')" size="small" bordered>
-                <NSpace vertical size="small" style="width: 100%">
-                  <div class="param-row">
-                    <span class="param-label">芯片平台</span>
-                    <NSelect
-                      :value="config.platform"
-                      :options="platforms.map(p => ({ label: p.name + (p.source === 'user' ? ' ✏️' : ''), value: p.name }))"
-                      style="width: 240px"
-                      @update:value="onPlatformChange"
-                    />
-                    <NButton size="tiny" @click="openNewPlatform">+ 添加</NButton>
-                    <NButton
-                      v-if="config.platform && platforms.find(p => p.name === config.platform)?.source === 'user'"
-                      size="tiny" type="error"
-                      @click="deletePlatform(config.platform)"
-                    >删除</NButton>
-                  </div>
-                  <div v-if="config.platform" class="dim-text" style="font-size: 12px">
-                    AOSP: {{ platforms.find(p => p.name === config.platform)?.aosp_root || '' }}
-                  </div>
-                </NSpace>
-              </NCard>
-            </NGi>
+    <div class="main-layout">
+      <!-- ═══ 左侧：平台/芯片树 ═══ -->
+      <div class="sidebar">
+        <NCard title="平台 / 芯片" size="small" bordered>
+          <template #header-extra>
+            <NButton size="tiny" type="primary" @click="openNewChip">+</NButton>
+          </template>
+          <NSpin :show="treeLoading">
+            <NTree
+              :data="treeData"
+              :selected-keys="selectedChipKey ? [selectedChipKey] : []"
+              :default-expand-all="true"
+              selectable
+              @update:selected-keys="onTreeSelect"
+            />
+            <NEmpty v-if="treeData.length === 0" description="暂无平台" style="margin-top: 20px" />
+          </NSpin>
+        </NCard>
+      </div>
 
-            <!-- 模块列表 -->
-            <NGi :span="2">
-              <NCard :title="t('learningConsole.modules')" size="small" bordered>
-                <div v-for="mod in allModules" :key="mod.name" class="module-row">
-                  <NSwitch
-                    :value="config.modules.includes(mod.name)"
-                    @update:value="(v: boolean) => {
-                      if (v) {
-                        if (!config.modules.includes(mod.name)) config.modules.push(mod.name);
-                      } else {
-                        config.modules = config.modules.filter((m: string) => m !== mod.name);
-                      }
-                    }"
-                  />
-                  <div class="module-info">
-                    <strong>{{ mod.name }}</strong>
-                    <p class="dim-text">{{ mod.description }}</p>
-                  </div>
-                </div>
-              </NCard>
-            </NGi>
+      <!-- ═══ 右侧：选中芯片的内容 ═══ -->
+      <div class="content">
+        <NSpace v-if="!currentChipDetail" vertical align="center" justify="center" style="height: 100%; min-height: 300px">
+          <span class="dim-text" style="font-size: 16px">← 请从左侧选择芯片</span>
+        </NSpace>
 
-            <!-- 运行时参数 -->
-            <NGi :span="2">
-              <NCard :title="t('learningConsole.runtimeParams')" size="small" bordered>
-                <NSpace vertical size="medium" style="width: 100%">
-                  <div class="param-row">
-                    <span class="param-label">{{ t("learningConsole.maxWorkers") }}</span>
-                    <NInputNumber
-                      v-model:value="config.runtime.max_workers"
-                      :min="1" :max="1024" style="width: 200px"
-                    />
-                  </div>
-                  <div class="param-row">
-                    <span class="param-label">{{ t("learningConsole.timeout") }}</span>
-                    <NInputNumber
-                      v-model:value="config.runtime.timeout"
-                      :min="30" :max="3600" style="width: 200px"
-                    />
-                    <span class="dim-text">s</span>
-                  </div>
-                  <div class="param-row">
-                    <span class="param-label">{{ t("learningConsole.maxInflight") }}</span>
-                    <NInputNumber
-                      v-model:value="config.runtime.max_inflight"
-                      :min="64" :max="16384" style="width: 200px"
-                    />
-                  </div>
-                </NSpace>
-              </NCard>
-            </NGi>
+        <template v-else>
+          <div class="chip-header">
+            <div class="chip-header-left">
+              <span class="chip-header-platform">{{ currentChipDetail!.platform }}</span>
+              <span class="chip-header-sep">/</span>
+              <span class="chip-header-name">{{ currentChipDetail!.name }}</span>
+              <code class="chip-header-path" :title="currentChipDetail!.aosp_root">{{ currentChipDetail!.aosp_root || '—' }}</code>
+            </div>
+            <NSpace>
+              <NButton size="tiny" @click="openEditChip(currentChipDetail!.platform, currentChipDetail!.name)">编辑</NButton>
+              <NButton size="tiny" type="error" @click="confirmDeleteChip(currentChipDetail!.platform, currentChipDetail!.name)">删除</NButton>
+            </NSpace>
+          </div>
 
-            <!-- 保存 -->
-            <NGi :span="2">
-              <NButton type="primary" :loading="loading" @click="saveConfig" block>
-                {{ t("learningConsole.saveConfig") }}
-              </NButton>
-            </NGi>
-          </NGrid>
-        </NSpin>
-      </NTabPane>
+          <NTabs v-model:value="activeTab" type="line" animated>
+            <!-- ═══ Tab 1: 配置 ═══ -->
+            <NTabPane name="config" :tab="t('learningConsole.configTab')">
+              <NSpin :show="configLoading">
+
+                <!-- 模块配置 -->
+                <NCard title="模块" size="small" bordered style="margin-top: 12px">
+                  <div v-for="mod in allModules" :key="mod.name" class="module-row">
+                    <NSwitch
+                      :value="config.modules.includes(mod.name)"
+                      @update:value="(v: boolean) => {
+                        if (v) {
+                          if (!config.modules.includes(mod.name)) config.modules.push(mod.name);
+                        } else {
+                          config.modules = config.modules.filter((m: string) => m !== mod.name);
+                        }
+                      }"
+                    />
+                    <div class="module-info">
+                      <strong>{{ mod.name }}</strong>
+                      <p class="dim-text">{{ mod.description }}</p>
+                      <p v-if="mod.code_globs?.length" class="dim-text" style="font-size: 11px; font-family: monospace">
+                        {{ mod.code_globs.join(', ') }}
+                      </p>
+                    </div>
+                  </div>
+                  <NEmpty v-if="allModules.length === 0" description="该芯片暂无模块" style="margin-top: 8px" />
+                </NCard>
+
+                <!-- 运行时参数 -->
+                <NCard :title="t('learningConsole.runtimeParams')" size="small" bordered style="margin-top: 12px">
+                  <div class="runtime-row">
+                    <div class="param-col">
+                      <span class="param-label">{{ t("learningConsole.maxWorkers") }}</span>
+                      <NInputNumber v-model:value="config.runtime.max_workers" :min="1" :max="1024" style="width: 100px" size="small" />
+                    </div>
+                    <div class="param-col">
+                      <span class="param-label">{{ t("learningConsole.timeout") }}</span>
+                      <NInputNumber v-model:value="config.runtime.timeout" :min="30" :max="3600" style="width: 100px" size="small" />
+                      <span class="dim-text">s</span>
+                    </div>
+                    <div class="param-col">
+                      <span class="param-label">{{ t("learningConsole.maxInflight") }}</span>
+                      <NInputNumber v-model:value="config.runtime.max_inflight" :min="64" :max="16384" style="width: 130px" size="small" />
+                    </div>
+                  </div>
+                </NCard>
+
+                <!-- 保存 -->
+                <NButton type="primary" :loading="loading" @click="saveConfig" block style="margin-top: 12px">
+                  {{ t("learningConsole.saveConfig") }}
+                </NButton>
+              </NSpin>
+            </NTabPane>
 
       <!-- ═══ Tab 2: 控制 ═══ -->
       <NTabPane name="control" :tab="t('learningConsole.controlTab')">
@@ -763,30 +941,75 @@ onUnmounted(() => {
           </NGi>
         </NGrid>
       </NTabPane>
-    </NTabs>
+          </NTabs>
+        </template>
+      </div>
+    </div>
 
-    <!-- 平台添加/编辑弹窗 -->
-    <NModal v-model:show="showPlatformForm" :title="editingPlatform ? '编辑平台' : '添加平台'">
-      <NCard style="width: 500px" :bordered="false" size="small">
-        <NSpace vertical size="medium" style="width: 100%">
-          <div class="param-row">
-            <span class="param-label">平台名</span>
-            <NInput v-model:value="platformForm.name" :disabled="!!editingPlatform" placeholder="例如 mtk_6893" style="width: 240px" />
-          </div>
-          <div class="param-row">
-            <span class="param-label">AOSP 路径</span>
-            <NInput v-model:value="platformForm.aosp_root" placeholder="/path/to/aosp/root" style="width: 400px" />
-          </div>
-          <div class="param-row">
-            <span class="param-label">Wiki 路径</span>
-            <NInput v-model:value="platformForm.wiki_root" placeholder="./aosp_wiki" style="width: 240px" />
-          </div>
-          <NSpace>
-            <NButton type="primary" @click="savePlatform">{{ editingPlatform ? '保存' : '添加' }}</NButton>
-            <NButton @click="showPlatformForm = false">取消</NButton>
-          </NSpace>
+    <!-- 芯片编辑弹窗 -->
+    <NModal v-model:show="showChipForm" :title="editingChipKey ? '编辑芯片' : '添加芯片'" preset="card" style="width: 720px" :mask-closable="false">
+      <NSpace vertical size="medium" style="width: 100%; max-height: 70vh; overflow-y: auto">
+        <div class="param-row">
+          <span class="param-label">平台</span>
+          <NInput v-model:value="chipForm.platform" :disabled="!!editingChipKey" placeholder="例如 allwinner" style="width: 240px" />
+        </div>
+        <div class="param-row">
+          <span class="param-label">芯片名</span>
+          <NInput v-model:value="chipForm.name" :disabled="!!editingChipKey" placeholder="例如 h618" style="width: 240px" />
+        </div>
+        <div class="param-row">
+          <span class="param-label">AOSP 路径</span>
+          <NInput v-model:value="chipForm.aosp_root" placeholder="/path/to/aosp/root" style="width: 520px" />
+        </div>
+        <div class="param-row">
+          <span class="param-label">Wiki 路径</span>
+          <NInput v-model:value="chipForm.wiki_root" placeholder="./aosp_wiki" style="width: 240px" />
+        </div>
+
+        <NDivider>模块配置</NDivider>
+
+        <div v-for="(mod, idx) in chipForm.modules" :key="idx" class="module-editor">
+          <NCard size="tiny" :bordered="true">
+            <template #header>
+              <NSpace align="center">
+                <span class="dim-text" style="font-size: 12px">模块 {{ idx + 1 }}</span>
+                <NInput v-model:value="mod.name" placeholder="模块名" style="width: 140px" size="small" />
+                <NButton size="tiny" type="error" @click="removeModule(idx)">删除</NButton>
+              </NSpace>
+            </template>
+            <NSpace vertical size="small" style="width: 100%">
+              <div class="param-row">
+                <span class="param-label" style="min-width: 50px">描述</span>
+                <NInput v-model:value="mod.description" placeholder="描述信息" size="small" style="flex: 1" />
+              </div>
+              <div class="param-row">
+                <span class="param-label" style="min-width: 50px">Wiki 目录</span>
+                <NInput v-model:value="mod.wiki_dir" placeholder="bsp" style="width: 140px" size="small" />
+              </div>
+              <div>
+                <span class="dim-text" style="font-size: 12px; margin-bottom: 4px; display: block">Code Globs（每行一个）</span>
+                <NInput
+                  :value="_codeGlobsToText(mod.code_globs)"
+                  @update:value="(v: string) => mod.code_globs = _textToCodeGlobs(v)"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="**/hardware/**"
+                  size="small"
+                />
+              </div>
+            </NSpace>
+          </NCard>
+        </div>
+
+        <NButton dashed block @click="addModule">+ 添加模块</NButton>
+
+        <NDivider />
+
+        <NSpace justify="end">
+          <NButton type="primary" :loading="chipFormLoading" @click="saveChip">{{ editingChipKey ? '保存' : '添加' }}</NButton>
+          <NButton @click="showChipForm = false">取消</NButton>
         </NSpace>
-      </NCard>
+      </NSpace>
     </NModal>
   </div>
 </template>
@@ -794,7 +1017,7 @@ onUnmounted(() => {
 <style scoped lang="scss">
 .learning-console {
   padding: 24px;
-  max-width: 960px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
@@ -849,6 +1072,157 @@ onUnmounted(() => {
 .dim-text {
   color: var(--n-text-color-3, #999);
   font-size: 13px;
+}
+
+// ── Main Layout ─────────────────────────────────────────────────────
+.main-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 16px;
+  align-items: start;
+  min-height: calc(100vh - 100px);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+
+  // 选中芯片节点高亮样式
+  :deep(.n-tree-node--selected) {
+    .n-tree-node-content {
+      background: #eaf4ff !important;
+      border-radius: 4px;
+    }
+  }
+}
+
+.content {
+  min-width: 0;
+}
+
+// ── Chip Header ─────────────────────────────────────────────────────
+.chip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--n-color-embedded, #f8f9fa);
+  border-radius: 6px;
+  border: 1px solid var(--n-border-color, #e8e8e8);
+
+  .chip-header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .chip-header-platform {
+    font-weight: 600;
+    color: var(--n-text-color-3, #999);
+    font-size: 14px;
+  }
+
+  .chip-header-sep {
+    color: var(--n-text-color-3, #ccc);
+  }
+
+  .chip-header-name {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--n-text-color, #333);
+  }
+
+  .chip-header-path {
+    margin-left: 16px;
+    font-size: 11px;
+    color: var(--n-text-color-3, #999);
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// ── Platform Table (保留兼容) ───────────────────────────────────────
+
+// ── Runtime Row ─────────────────────────────────────────────────────
+.runtime-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.platform-table {
+  .pt-header {
+    display: grid;
+    grid-template-columns: 130px 1fr 70px 140px;
+    gap: 8px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--n-text-color-3, #999);
+    border-bottom: 2px solid var(--n-border-color, #eee);
+  }
+  .pt-row {
+    display: grid;
+    grid-template-columns: 130px 1fr 70px 140px;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border-bottom: 1px solid var(--n-border-color, #f5f5f5);
+    font-size: 13px;
+    transition: background .15s;
+    &:hover { background: var(--n-color-hover, #fafafa); }
+    &:last-child { border-bottom: none; }
+  }
+  .pt-row-active {
+    background: var(--n-color-target, #f0f7ff) !important;
+    border-left: 3px solid var(--n-color-primary, #18a058);
+  }
+  .pt-col-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    .pt-active-badge {
+      display: inline-block;
+      color: var(--n-color-primary, #18a058);
+      font-size: 11px;
+      margin-left: 4px;
+      font-weight: 600;
+    }
+  }
+  .pt-col-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--n-text-color-3, #999);
+  }
+  .pt-col-source { text-align: center; }
+  .pt-col-actions {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+  }
+}
+
+// ── Module Editor ────────────────────────────────────────────────────
+.module-editor {
+  margin-bottom: 8px;
+}
+
+// ── Param Column ─────────────────────────────────────────────────────
+.param-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  .param-label {
+    min-width: 80px;
+    font-weight: 500;
+  }
 }
 
 .history-row {

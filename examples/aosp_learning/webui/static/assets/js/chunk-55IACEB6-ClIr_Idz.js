@@ -1,1 +1,0 @@
-import{xa as s}from"./index-CORpNa3x.js";import{Bt as i,Vt as o,jt as t,t as m}from"./src-Cv0uCF44.js";var r,l=s((()=>{o(),m(),r=i((a,e)=>{let n;return e==="sandbox"&&(n=t("#i"+a)),(e==="sandbox"?t(n.nodes()[0].contentDocument.body):t("body")).select(`[id="${a}"]`)},"getDiagramElement")}));export{l as n,r as t};

@@ -1,1 +1,0 @@
-import{xa as s}from"./index-tvYt9uZA.js";import{Bt as i,Vt as o,jt as t,t as m}from"./src-R1xd3Kus.js";var r,l=s((()=>{o(),m(),r=i((a,e)=>{let n;return e==="sandbox"&&(n=t("#i"+a)),(e==="sandbox"?t(n.nodes()[0].contentDocument.body):t("body")).select(`[id="${a}"]`)},"getDiagramElement")}));export{l as n,r as t};

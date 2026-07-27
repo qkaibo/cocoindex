@@ -1,1 +1,0 @@
-import{xa as s}from"./index-tvYt9uZA.js";import{Bt as r,Vt as a}from"./src-R1xd3Kus.js";var t,e,_=s((()=>{a(),e=(t=class{constructor(i){this.init=i,this.records=this.init()}reset(){this.records=this.init()}},r(t,"ImperativeState"),t)}));export{_ as n,e as t};

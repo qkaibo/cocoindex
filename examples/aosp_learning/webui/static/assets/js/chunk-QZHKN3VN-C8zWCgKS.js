@@ -1,0 +1,1 @@
+import{Ca as s}from"./index-DXLAPDfS.js";import{Bt as r,Vt as a}from"./src-C1yku_wW.js";var t,e,_=s((()=>{a(),e=(t=class{constructor(i){this.init=i,this.records=this.init()}reset(){this.records=this.init()}},r(t,"ImperativeState"),t)}));export{_ as n,e as t};
