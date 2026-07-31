@@ -95,7 +95,7 @@ jobs:
               --no-install-project
 
         - name: Install prek
-          uses: j178/prek-action@v2
+          uses: j178/prek-action@v2.0.6
           with:
             install-only: true
 
