@@ -95,6 +95,40 @@ def _register_builtin_types() -> None:
                 _UNPICKLE_SAFE_GLOBALS[("numpy._core.numeric", "_frombuffer")] = (
                     _frombuffer
                 )
+        # Register numpy scalar types (float32, float64, int32, etc.)
+        for _scalar_name in ("float16", "float32", "float64", "int8", "int16",
+                             "int32", "int64", "uint8", "uint16", "uint32", "uint64",
+                             "bool_"):
+            _scalar = getattr(np, _scalar_name, None)
+            if _scalar is not None:
+                _UNPICKLE_SAFE_GLOBALS[("numpy", _scalar_name)] = _scalar
+        # numpy 2.x pickle scalar values via numpy._core.multiarray.scalar
+        _multiarray = getattr(np, "_core", None)
+        if _multiarray is not None:
+            _ma = getattr(_multiarray, "multiarray", None)
+            if _ma is not None:
+                _scalar_fn = getattr(_ma, "scalar", None)
+                if _scalar_fn is not None:
+                    _UNPICKLE_SAFE_GLOBALS[("numpy._core.multiarray", "scalar")] = _scalar_fn
+        # numpy 1.x uses numpy.core.multiarray.scalar
+        _core_ma = getattr(np, "core", None)
+        if _core_ma is not None:
+            _core_ma_mod = getattr(_core_ma, "multiarray", None)
+            if _core_ma_mod is not None:
+                _core_scalar_fn = getattr(_core_ma_mod, "scalar", None)
+                if _core_scalar_fn is not None:
+                    _UNPICKLE_SAFE_GLOBALS[("numpy.core.multiarray", "scalar")] = _core_scalar_fn
+        # Register _reconstruct (needed for ndarray unpickling in both 1.x and 2.x)
+        for _ma_path in [("numpy._core.multiarray", "_reconstruct"), ("numpy.core.multiarray", "_reconstruct")]:
+            _mod_name, _fn_name = _ma_path
+            try:
+                import importlib
+                _mod = importlib.import_module(_mod_name)
+                _reconstruct = getattr(_mod, _fn_name, None)
+                if _reconstruct is not None:
+                    _UNPICKLE_SAFE_GLOBALS[_ma_path] = _reconstruct
+            except ImportError:
+                pass
     except ImportError:
         pass
 
@@ -290,7 +324,19 @@ _msgspec_encoder = msgspec.msgpack.Encoder(enc_hook=_enc_hook)
 def _ext_hook(code: int, data: memoryview) -> Any:  # type: ignore[type-arg]
     """Un-quarantine pickle inside msgspec payloads."""
     if code == 100:
-        return _RestrictedUnpickler(io.BytesIO(bytes(data))).load()
+        val = _RestrictedUnpickler(io.BytesIO(bytes(data))).load()
+        # Legacy tracking records serialized VectorSchema.dtype as a numpy
+        # dtype (quarantined pickle, ext code 100). New code stores plain str;
+        # normalize old values so previously-written LMDB records still
+        # deserialize — avoids a full re-index on schema migration.
+        try:
+            import numpy as np
+
+            if isinstance(val, np.dtype):
+                return str(val)
+        except ImportError:
+            pass
+        return val
     raise ValueError(f"Unknown extension code: {code}")
 
 

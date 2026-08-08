@@ -1,35 +1,25 @@
-# AOSP 学习平台配置
-# 新增芯片平台：复制一个 platform 块，修改 aosp_root / wiki_root / modules 即可
+# qcm4490 高通平台索引配置
+# 按用户要求:
+# 1. amss 全部学习（排除 build 目录 — bringup 生成物，留着等于给答案）
+# 2. qssi 全部排除（不扫描）
+# 3. target 只取 hardware, kernel_platform, vendor
 #
-# Prefect Web UI 启动后，在 http://<your-ip>:4200 可触发索引和监控进度
-# 远程开发务必先执行:
-#   prefect config set PREFECT_SERVER_API_HOST=<your-ip>
-#   prefect config set PREFECT_API_URL=http://<your-ip>:4200/api
-
+# 文件分布:
+#   target/kernel_platform   103K  ┐
+#   target/hardware           3.4K ├ BSP (全部 target 下 BSP 范畴)
+#   target/vendor              24K ┘
+#   amss (排除build)          161K  → AMSS (全部子系统)
+#
 platforms:
-  aw_h618:
-    aosp_root: /CM/work/h618/android12/H618-android-20230427-v1.1
+  qcm4490:
+    aosp_root: /home/ts/ssd/workspace/code/qcm4490
     wiki_root: ./aosp_wiki
     modules:
       - name: BSP
         code_globs:
-          - "**/hardware/**"
-          - "**/device/**"
-          - "**/vendor/**"
-          - "**/longan/**"
+          - "target/kernel_platform/**"
+          - "target/hardware/**"
+          - "target/vendor/**"
+          - "amss/**"
         wiki_dir: bsp
-        description: "板级支持包：kernel驱动(H618 longan) + DTS + HAL + vendor配置"
-
-      - name: FRAMEWORK
-        code_globs:
-          - "**/frameworks/**"
-          - "**/system/**"
-        wiki_dir: framework
-        description: "Android Framework层：system_server, JNI, 系统服务"
-
-      - name: APP
-        code_globs:
-          - "**/packages/**"
-          - "**/cts/**"
-        wiki_dir: app
-        description: "应用层：Settings, Launcher, CTS测试"
+        description: "BSP: kernel_platform + hardware + vendor + amss（排除 build 目录）"

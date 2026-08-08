@@ -267,11 +267,23 @@ class _PointHandler(coco.TargetHandler[qdrant_models.PointStruct, _PointFingerpr
                 upserts.append(action.point)
 
         if upserts:
-            await asyncio.to_thread(
-                self._client.upsert,
-                collection_name=self._collection_name,
-                points=upserts,
-            )
+            _BATCH_SIZE = 1500
+            for _i in range(0, len(upserts), _BATCH_SIZE):
+                _batch = upserts[_i : _i + _BATCH_SIZE]
+                _attempt = 0
+                while True:
+                    try:
+                        await asyncio.to_thread(
+                            self._client.upsert,
+                            collection_name=self._collection_name,
+                            points=_batch,
+                        )
+                        break
+                    except Exception:
+                        _attempt += 1
+                        if _attempt >= 3:
+                            raise
+                        await asyncio.sleep(1.0 * _attempt)
 
         if deletes:
             selector = qdrant_models.PointIdsList(

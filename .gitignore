@@ -44,3 +44,6 @@ examples/**/uv.lock
 
 # Claude Code local state
 .claude/*.lock
+examples/aosp_learning/index_run.log
+.cursor/
+**/.env

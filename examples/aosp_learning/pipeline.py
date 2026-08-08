@@ -9,6 +9,7 @@ definitions — this module contains only reusable pipeline functions.
 from __future__ import annotations
 
 import asyncio
+import bisect
 import concurrent.futures
 import fnmatch
 import logging
@@ -20,6 +21,13 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator, Literal, Sequence
 
 _logger = logging.getLogger(__name__)
+
+# Limit concurrent file processing to keep the GPU embedding queue
+# well-fed without overwhelming it. 1024 concurrency caused 366 threads
+# sleeping on GPU contention → 6.9 files/sec. 16 concurrency → 9.4 files/sec.
+# With the spawn_blocking fix in place, LMDB is no longer the bottleneck.
+_MAX_CONCURRENT_FILES = 64
+_file_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_FILES)
 
 import numpy as np
 from qdrant_client import QdrantClient
@@ -63,11 +71,14 @@ class ModuleConfig:
 
 # ── Configuration ───────────────────────────────────────────────────────
 
-QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6334")
+QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 TOP_K = 10
 EMBED_MODEL = "BAAI/bge-m3"
 VEC_DIM = 1024
 _DEFAULT_CONFIG = pathlib.Path(__file__).resolve().parent / "platforms.yaml"
+
+# Use HF mirror if not set (needed for model download in China)
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 
 def collection_name(project: str) -> str:
@@ -99,7 +110,9 @@ def make_app(
     Each module gets an independent LMDB via ``AppConfig(name=...)``.
     """
     return coco.App(
-        coco.AppConfig(name=f"{project}_{module.name.lower()}"),
+        coco.AppConfig(
+            name=f"{project}_{module.name.lower()}",
+        ),
         app_main,
         aosp_root=aosp_root,
         wiki_root=wiki_root,
@@ -128,7 +141,9 @@ _CODE_GLOBS = [
     "**/*.java",
     "**/*.dts", "**/*.dtsi",
 ]
-_CODE_EXCLUDES = ["**/.*", "**/out", "**/__pycache__", "**/build"]
+_CODE_EXCLUDES = ["**/.*", "**/out", "**/__pycache__", "**/build",
+                  "**/prebuilts", "**/prebuilts/**",
+                  "**/prebuilts-master", "**/prebuilts-master/**"]
 
 _NON_ARM_ARCHES = [
     "alpha", "arc", "c6x", "csky", "h8300", "hexagon", "ia64",
@@ -155,19 +170,31 @@ def _guess_language(filename: str) -> str | None:
 
 
 def _module_code_roots(mod: ModuleConfig, aosp_root: pathlib.Path) -> list[pathlib.Path]:
-    """Extract base dirs from module code_globs for targeted directory walking."""
+    """Extract base dirs from module code_globs for targeted directory walking.
+
+    Supports multi-level paths: ``target/kernel_platform/**`` → ``aosp_root/target/kernel_platform``.
+    Only the first glob segment with ``**`` or ``*`` stops path extraction;
+    everything before it is treated as a literal directory chain.
+    """
     roots: list[pathlib.Path] = []
     seen: set[str] = set()
     for pattern in mod.code_globs:
         parts = pattern.strip("/").split("/")
+        dir_parts: list[str] = []
         for p in parts:
-            if p not in ("**", "*", ""):
-                if p not in seen:
-                    d = aosp_root / p
-                    if d.is_dir():
-                        roots.append(d)
-                        seen.add(p)
+            if p in ("**", "*"):
                 break
+            if p:
+                dir_parts.append(p)
+        if not dir_parts:
+            continue
+        key = "/".join(dir_parts)
+        if key in seen:
+            continue
+        d = aosp_root.joinpath(*dir_parts)
+        if d.is_dir():
+            roots.append(d)
+            seen.add(key)
     return roots
 
 
@@ -274,7 +301,9 @@ def _tokenize_to_sparse(
 
 @coco.lifespan
 async def coco_lifespan(builder: coco.EnvironmentBuilder) -> AsyncIterator[None]:
-    client = qdrant.create_client(QDRANT_URL, prefer_grpc=True)
+    # timeout=30: Qdrant optimizer 合并 segment 时会暂时拖慢 upsert,
+    # 默认 httpx 5s 超时太紧,会误报组件失败(进而触发 LMDB 清理死锁路径)。
+    client = qdrant.create_client(QDRANT_URL, prefer_grpc=False, timeout=30)
     builder.provide(QDRANT_DB, client)
     embedder = FP16Embedder(EMBED_MODEL, device="cuda")
     builder.provide(EMBEDDER, embedder)
@@ -323,11 +352,8 @@ _DTS_NODE_LINE = re.compile(r'^\s*(\w[\w-]*)\s*\{', re.MULTILINE)
 _MACRO_LINE = re.compile(r'^\s*#define\s+(\w+)', re.MULTILINE)
 
 
-def _find_enclosing_symbol(source_text: str, offset: int, language: str) -> str | None:
-    if not source_text or offset <= 0:
-        return None
-    before = source_text[:offset]
-    lines = before.split('\n')
+def _symbol_patterns(language: str) -> list[re.Pattern]:
+    """Return the ordered symbol patterns for a language (priority = list order)."""
     patterns = [_FUNC_LINE, _CTOR_LINE, _STRUCT_LINE, _MACRO_LINE]
     if language in ('c', 'cpp'):
         patterns = [_FUNC_LINE, _STRUCT_LINE, _MACRO_LINE]
@@ -335,23 +361,59 @@ def _find_enclosing_symbol(source_text: str, offset: int, language: str) -> str 
         patterns = [_FUNC_LINE, _CLASS_LINE]
     elif language == 'dts':
         patterns = [_DTS_NODE_LINE, _MACRO_LINE]
-    for line in reversed(lines):
+    return patterns
+
+
+def _build_symbol_index(source_text: str, language: str) -> list[tuple[int, str]]:
+    """Scan the file ONCE and return [(line_start_byte, symbol_name)] sorted by offset.
+
+    Semantics are identical to the old per-chunk scan in ``_find_enclosing_symbol``:
+    for every line, try the language's patterns in priority order and record the
+    first match's symbol name with the line's start byte offset. Per-chunk queries
+    then binary-search this index instead of re-scanning the whole prefix, turning
+    the O(N^2) cost (a 26MB file took ~164 min) into O(N + C log M) (~ms).
+    """
+    patterns = _symbol_patterns(language)
+    index: list[tuple[int, str]] = []
+    line_start = 0
+    for line in source_text.split('\n'):
         for pat in patterns:
             m = pat.search(line)
             if m:
-                return m.group(1)
-    return None
+                index.append((line_start, m.group(1)))
+                break
+        line_start += len(line) + 1
+    return index
 
 
-def _find_enclosing_heading(source_text: str, offset: int) -> str | None:
-    if not source_text or offset <= 0:
+def _find_enclosing_symbol(symbol_index: list[tuple[int, str]], offset: int) -> str | None:
+    """Return the symbol name of the nearest declaration line at or before *offset*."""
+    if not symbol_index or offset <= 0:
         return None
-    before = source_text[:offset]
-    for line in reversed(before.split('\n')):
+    # bisect_left: only lines whose start byte is strictly before offset are
+    # visible to the old logic (source_text[:offset] excludes the byte at offset).
+    i = bisect.bisect_left(symbol_index, (offset,)) - 1
+    return symbol_index[i][1] if i >= 0 else None
+
+
+def _build_heading_index(source_text: str) -> list[tuple[int, str]]:
+    """One-pass scan for markdown headings -> [(line_start, heading_text)]."""
+    index: list[tuple[int, str]] = []
+    line_start = 0
+    for line in source_text.split('\n'):
         m = re.match(r'^#{1,6}\s+(.*)', line)
         if m:
-            return m.group(1).strip()
-    return None
+            index.append((line_start, m.group(1).strip()))
+        line_start += len(line) + 1
+    return index
+
+
+def _find_enclosing_heading(heading_index: list[tuple[int, str]], offset: int) -> str | None:
+    """Return the nearest heading at or before *offset*."""
+    if not heading_index or offset <= 0:
+        return None
+    i = bisect.bisect_left(heading_index, (offset,)) - 1
+    return heading_index[i][1] if i >= 0 else None
 
 
 def _build_embed_text(chunk_text: str, chunk_type: str, fpath: str, module: str) -> str:
@@ -363,6 +425,8 @@ def _build_embed_text(chunk_text: str, chunk_type: str, fpath: str, module: str)
 
 
 # ── Shared chunk writer ─────────────────────────────────────────────────
+# GitHub 原版语义: coco.map 并发执行 chunk,官方文档明确"不创建组件",
+# 不会产生 per-chunk LMDB 提交,不会触发持锁死锁。
 
 @coco.fn
 async def write_chunk(
@@ -376,6 +440,8 @@ async def write_chunk(
     source_text: str,
     id_gen: IdGenerator,
     target: qdrant.CollectionTarget,
+    symbol_index: list[tuple[int, str]],
+    heading_index: list[tuple[int, str]],
 ) -> None:
     embed_text = _build_embed_text(chunk.text, chunk_type, str(file_path), module)
     embedding = await coco.use_context(EMBEDDER).embed(embed_text)
@@ -387,9 +453,9 @@ async def write_chunk(
 
     function_name: str | None = None
     if chunk_type == "code":
-        function_name = _find_enclosing_symbol(source_text, chunk.start.byte_offset, language)
+        function_name = _find_enclosing_symbol(symbol_index, chunk.start.byte_offset)
     else:
-        function_name = _find_enclosing_heading(source_text, chunk.start.byte_offset)
+        function_name = _find_enclosing_heading(heading_index, chunk.start.byte_offset)
 
     point = qdrant_models.PointStruct(
         id=await id_gen.next_id(chunk.text),
@@ -425,9 +491,22 @@ async def process_code_file(
     target: qdrant.CollectionTarget,
     file_rel_path: pathlib.PurePath,
 ) -> None:
-    text = await file.read_text()
+    async with _file_semaphore:
+        await _process_code_file_impl(
+            file, module, project, target, file_rel_path,
+        )
+
+
+async def _process_code_file_impl(
+    file: FileLike,
+    module: str,
+    project: str,
+    target: qdrant.CollectionTarget,
+    file_rel_path: pathlib.PurePath,
+) -> None:
     fname = str(file_rel_path.name)
     fpath = file_rel_path
+    text = await file.read_text()
     language = _guess_language(fname)
 
     try:
@@ -449,9 +528,11 @@ async def process_code_file(
             language=None,
         )
     id_gen = IdGenerator()
+    symbol_index = _build_symbol_index(text, language or "text")
     await coco.map(
         write_chunk,
-        chunks, module, project, "code", fpath, language or "text", fname, text, id_gen, target,
+        chunks, module, project, "code", fpath, language or "text", fname, text,
+        id_gen, target, symbol_index, [],
     )
 
 
@@ -459,6 +540,16 @@ async def process_code_file(
 
 @coco.fn(memo=True)
 async def process_wiki_file(
+    file: FileLike,
+    module: str,
+    project: str,
+    target: qdrant.CollectionTarget,
+) -> None:
+    async with _file_semaphore:
+        await _process_wiki_file_impl(file, module, project, target)
+
+
+async def _process_wiki_file_impl(
     file: FileLike,
     module: str,
     project: str,
@@ -477,9 +568,11 @@ async def process_wiki_file(
         language=None,
     )
     id_gen = IdGenerator()
+    heading_index = _build_heading_index(text)
     await coco.map(
         write_chunk,
-        chunks, module, project, "wiki", fpath, wiki_lang, fname, text, id_gen, target,
+        chunks, module, project, "wiki", fpath, wiki_lang, fname, text,
+        id_gen, target, [], heading_index,
     )
 
 
@@ -650,7 +743,7 @@ async def query(project: str) -> None:
     args = parser.parse_args()
 
     embedder = FP16Embedder(EMBED_MODEL, device="cuda")
-    client = qdrant.create_client(QDRANT_URL, prefer_grpc=True)
+    client = qdrant.create_client(QDRANT_URL, prefer_grpc=False, timeout=30)
     sparse_tok = _SparseTokenizer(EMBED_MODEL)
 
     if not client.collection_exists(collection_name(project)):

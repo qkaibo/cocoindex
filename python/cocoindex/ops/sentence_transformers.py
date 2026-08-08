@@ -119,7 +119,7 @@ class SentenceTransformerEmbedder(_schema.VectorSchemaProvider):
                     )
         return self._model
 
-    @coco.fn.as_async(batching=True, runner=coco.GPU, max_batch_size=64)
+    @coco.fn.as_async(batching=True, runner=coco.GPU, max_batch_size=256)
     def _embed(
         self,
         texts: list[str],
@@ -200,7 +200,7 @@ class SentenceTransformerEmbedder(_schema.VectorSchemaProvider):
             RuntimeError: If the model's embedding dimension cannot be determined.
         """
         dim = await self.dimension()
-        return _schema.VectorSchema(dtype=_np.dtype(_np.float32), size=dim)
+        return _schema.VectorSchema(dtype="float32", size=dim)
 
     @coco.fn.as_async(runner=coco.GPU, memo=True)
     def dimension(self) -> int:

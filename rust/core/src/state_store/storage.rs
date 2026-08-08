@@ -137,8 +137,9 @@ struct StorageInner {
 /// handles inside the closure and do not move-out of captures, so this is
 /// already satisfied.
 ///
-/// `Sync` is required because `try_run_once` holds `&[TxnBody]` across
-/// `await` points; for `&T` to be `Send`, `T` must be `Sync`.
+/// `Sync` is required because `try_run_once` passes a raw pointer to
+/// `&[TxnBody]` into `spawn_blocking`; for `*const [T]` to be `Send`,
+/// `T` must be `Sync`.
 type TxnBody = Box<
     dyn for<'a, 'env> Fn(&'a mut WriteTxn<'env>) -> BoxFuture<'a, Result<Box<dyn Any + Send>>>
         + Send
@@ -155,6 +156,31 @@ fn is_map_full(err: &Error) -> bool {
         );
     }
     false
+}
+
+/// Transparent `Send` + `Sync` wrapper around a raw pointer. Used solely to
+/// pass a `&[TxnBody]` reference into `spawn_blocking` without cloning the
+/// boxed closures. The pointed-to data must outlive the wrapper.
+struct SendPtr<T: ?Sized>(*const T);
+// SAFETY: the caller guarantees the pointed-to data outlives any use of this
+// wrapper. `TxnBody` is `Send + Sync` so sharing across threads is sound.
+unsafe impl<T: ?Sized> Send for SendPtr<T> {}
+unsafe impl<T: ?Sized> Sync for SendPtr<T> {}
+
+impl<T: ?Sized> Clone for SendPtr<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T: ?Sized> Copy for SendPtr<T> {}
+
+impl<T: ?Sized> SendPtr<T> {
+    /// # Safety
+    /// The caller must ensure the pointed-to data has not been dropped.
+    unsafe fn deref(&self) -> &T {
+        // SAFETY: upheld by caller
+        unsafe { &*self.0 }
+    }
 }
 
 /// When a `MDB_MAP_FULL` error occurs (either from a put inside a body or
@@ -175,15 +201,32 @@ impl TxnRunner {
     /// commit returns an error the write txn and coordinator read guard are
     /// dropped before the error propagates. On `MapFull` the caller should
     /// resize (under the coordinator write guard) and retry.
+    ///
+    /// The entire LMDB write transaction (from `write_txn` to `commit`) runs
+    /// inside [`tokio::task::spawn_blocking`] on a dedicated OS thread.
+    /// This is required because LMDB's `me_wmutex` is a thread-level
+    /// `pthread_mutex_t` — if it were held across a tokio `.await` point,
+    /// a different task scheduled on the same worker thread could deadlock
+    /// trying to acquire the same mutex on the same thread.
     async fn try_run_once(&self, inputs: &[TxnBody]) -> Result<Vec<Box<dyn Any + Send>>> {
         let _read_guard = self.coord.read().await;
-        let mut outputs = Vec::with_capacity(inputs.len());
-        let mut wtxn = WriteTxn::new(self.db_env.write_txn()?);
-        for body in inputs {
-            outputs.push(body(&mut wtxn).await?);
-        }
-        wtxn.into_inner().commit()?;
-        Ok(outputs)
+        let env = self.db_env.clone();
+        // SAFETY: `inputs` is owned by the caller's `Vec<TxnBody>` in
+        // `run()`, which lives across the entire `try_run_once` call.
+        let inputs_ptr = SendPtr(inputs as *const [TxnBody]);
+        let handle = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || {
+            let inputs = unsafe { inputs_ptr.deref() };
+            let mut outputs = Vec::with_capacity(inputs.len());
+            let mut wtxn = WriteTxn::new(env.write_txn()?);
+            for body in inputs {
+                outputs.push(handle.block_on(body(&mut wtxn))?);
+            }
+            wtxn.into_inner().commit()?;
+            Ok(outputs)
+        })
+        .await
+        .map_err(|e| internal_error!("LMDB write batch panicked: {e}"))?
     }
 
     /// Doubles the env's current map size (aligned to page). Caller must hold

@@ -20,14 +20,24 @@ class VectorSchemaProvider(_typing.Protocol):
     def __coco_vector_schema__(self) -> _typing.Awaitable[VectorSchema]: ...
 
 
+from cocoindex._internal.serde import unpickle_safe
+
+
 class VectorSchema(_msgspec.Struct, frozen=True, tag=True):
     """Additional information for a vector column."""
 
-    dtype: _np.dtype
+    # dtype is stored as plain str (e.g. "float32"). Annotated as object so
+    # msgspec invokes ext_hook when decoding LEGACY tracking records that
+    # serialized a numpy dtype here (ext code 100 → normalized to str in
+    # serde._ext_hook); new records encode the str natively.
+    dtype: object
     size: int
 
     async def __coco_vector_schema__(self) -> VectorSchema:
         return self
+
+
+unpickle_safe(VectorSchema)
 
 
 async def get_vector_schema(obj: object) -> VectorSchema | None:
@@ -53,6 +63,9 @@ class MultiVectorSchema(_msgspec.Struct, frozen=True, tag=True):
 
     async def __coco_multi_vector_schema__(self) -> MultiVectorSchema:
         return self
+
+
+unpickle_safe(MultiVectorSchema)
 
 
 async def get_multi_vector_schema(obj: object) -> MultiVectorSchema | None:

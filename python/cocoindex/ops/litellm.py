@@ -316,7 +316,7 @@ class LiteLLMEmbedder(_schema.VectorSchemaProvider):
             VectorSchema with the embedding dimension and dtype.
         """
         dim = await self._get_dim()
-        return _schema.VectorSchema(dtype=_np.dtype(_np.float32), size=dim)
+        return _schema.VectorSchema(dtype="float32", size=dim)
 
     def __coco_memo_key__(self) -> object:
         return (self._model, self._kwargs)

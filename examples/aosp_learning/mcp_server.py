@@ -9,8 +9,8 @@ Usage (register in your MCP config)::
 
     {
         "aosp-search": {
-            "command": "/CM/cocoindex-env/bin/python",
-            "args": ["/CM/work/cocoindex/examples/aosp_learning/mcp_server.py"]
+            "command": "/home/ts/.hermes/hermes-agent/venv/bin/python",
+            "args": ["/home/ts/cocoindex/examples/aosp_learning/mcp_server.py"]
         }
     }
 
@@ -40,7 +40,7 @@ from transformers import AutoTokenizer
 
 load_dotenv()
 
-QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6334")
+QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 EMBED_MODEL = "BAAI/bge-m3"
 VEC_DIM = 1024
 TOP_K_DEFAULT = 10
@@ -105,24 +105,24 @@ mcp = FastMCP(
 @mcp.tool()
 async def search_aosp(
     query: str,
-    project: str = "aw_h618",
+    project: str = "qcm4490",
     module: str | None = None,
     top_k: int = TOP_K_DEFAULT,
 ) -> str:
     """Search AOSP code + wiki index semantically.
 
     Use this to find relevant code snippets and documentation for any
-    AOSP-related question.  Supports module-scoped search (BSP / APP /
-    FRAMEWORK) and multi-project isolation.
+    AOSP-related question.  Supports module-scoped search (BSP) and
+    multi-project isolation.
 
     Args:
         query: Natural-language search query (Chinese or English).
             Examples: "MIPI DSI lane config", "GPIO 中断处理流程",
             "bq27541 电量计驱动".
         project: Project identifier — one Qdrant collection per chip/vendor.
-            Default ``"aw_h618"`` (Allwinner H618).
+            Default ``"qcm4490"`` (Qualcomm QCM4490).
         module: Limit results to a single learning module.
-            One of ``"BSP"``, ``"APP"``, ``"FRAMEWORK"`` (or ``None`` for all).
+            One of ``"BSP"`` (or ``None`` for all).
         top_k: Number of results to return (default 10, max 50).
 
     Returns:
