@@ -23,3 +23,26 @@ platforms:
           - "amss/**"
         wiki_dir: bsp
         description: "BSP: kernel_platform + hardware + vendor + amss（排除 build 目录）"
+  seahorse_wear_base:
+    aosp_root: /home/ts/ssd/workspace/code/Seahorse_wear-base
+    wiki_root: ./seahorse_wiki
+    modules:
+      - name: FW
+        code_globs:
+          - "apps/**"
+          - "rtos/**"
+          - "bthost/**"
+          - "lib/**"
+          - "libc_adapter/**"
+          - "thirdparty/**"
+          - "include/**"
+          - "config/**"
+          - "platform/**"
+          - "services/**"
+          - "vendor/**"
+          - "multimedia/**"
+          - "net/**"
+          - "nn/**"
+          - "utils/**"
+        wiki_dir: seahorse
+        description: "Seahorse 穿戴设备固件（RTOS + BTHost + Multimedia + NN）"

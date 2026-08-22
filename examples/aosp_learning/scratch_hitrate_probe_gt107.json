@@ -1,0 +1,1167 @@
+[
+  {
+    "id": "Q1",
+    "question": "这个项目的充电整体架构是什么？哪些逻辑跑在 ADSP（battmngr），哪些跑在 ke",
+    "gt_files": [
+      "pmic_glink_msg.h",
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "pmic_glink_msg.h",
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q2",
+    "question": "qti_battery_charger和power_supply子系统的关系？",
+    "gt_files": [
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q3",
+    "question": "kernel 侧 battery_chg_dev 里的 property id和 ADS",
+    "gt_files": [
+      "pmic_glink_msg.h",
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "pmic_glink_msg.h",
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q5",
+    "question": "jeita 各区间（critical cold / hard cold / soft c",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q6",
+    "question": "每个 jeita 区间对应的 FCC/FV 补偿在哪里配置？soft 区的 FCC 降流",
+    "gt_files": [
+      "smb5-lib.c",
+      "smblite-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c",
+      "smblite-lib.c"
+    ]
+  },
+  {
+    "id": "Q7",
+    "question": "充电状态分哪几种，状态上报 NOT_CHARGING 和 DISCHARGING 的区别",
+    "gt_files": [
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q8",
+    "question": "怎么增加假温度节点用来模拟各个温度的限流停充策略？",
+    "gt_files": [
+      "BattMngrTech_ParallelCharging_R3.h"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_ParallelCharging_R3.h"
+    ]
+  },
+  {
+    "id": "Q9",
+    "question": "充电截止电压（float voltage，FV）在哪里配置？整机默认是多少，怎么改成 4",
+    "gt_files": [
+      "battery.c"
+    ],
+    "gt_basenames": [
+      "battery.c"
+    ]
+  },
+  {
+    "id": "Q10",
+    "question": "充电截止电流（iterm）在哪里配置，怎么定值？iterm 设置不当会导致什么问题（提前",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngr_tech_schgp_chg.h"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngr_tech_schgp_chg.h"
+    ]
+  },
+  {
+    "id": "Q11",
+    "question": "最大充电电流（FCC）和输入限流（ICL）在哪里配置？不同充电类型（SDP/DCP/PD",
+    "gt_files": [
+      "battery.c"
+    ],
+    "gt_basenames": [
+      "battery.c"
+    ]
+  },
+  {
+    "id": "Q12",
+    "question": "OTG 输出电流在哪里配置？",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q13",
+    "question": "DCIN 路径的电压/电流上限（dcin_voltage_max_mv / dcin_c",
+    "gt_files": [
+      "icm_scp_inov_dcin.c",
+      "BattmngrBsp.h"
+    ],
+    "gt_basenames": [
+      "BattmngrBsp.h",
+      "icm_scp_inov_dcin.c"
+    ]
+  },
+  {
+    "id": "Q16",
+    "question": "回充（recharge）条件在哪里配置？SOC 掉多少、电压掉多少会触发回充？",
+    "gt_files": [
+      "qpnp-qg.c"
+    ],
+    "gt_basenames": [
+      "qpnp-qg.c"
+    ]
+  },
+  {
+    "id": "Q17",
+    "question": "充电终止（TERMINATION）的判定条件是什么？",
+    "gt_files": [
+      "BattMngrTech_QBG_R1.h",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_QBG_R1.h",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q20",
+    "question": "off-mode（关机态）Pogo 充电怎么使能？关机状态下 ADSP 的充电任务是怎么",
+    "gt_files": [
+      "charger_thread.h"
+    ],
+    "gt_basenames": [
+      "charger_thread.h"
+    ]
+  },
+  {
+    "id": "Q21",
+    "question": "battmngr状态机更新逻辑是什么？",
+    "gt_files": [
+      "BattMngrStateMachineLevels.c",
+      "battman_power.c"
+    ],
+    "gt_basenames": [
+      "BattMngrStateMachineLevels.c",
+      "battman_power.c"
+    ]
+  },
+  {
+    "id": "Q22",
+    "question": "关机充电（KPOC）时 LED 怎么控制？",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q25",
+    "question": "关机电压（低电自动关机阈值）在哪里配置？",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q26",
+    "question": "适配三方电量计，要做哪些配置",
+    "gt_files": [
+      "sw_8350b.c"
+    ],
+    "gt_basenames": [
+      "sw_8350b.c"
+    ]
+  },
+  {
+    "id": "Q27",
+    "question": "ADSP 充电软件的可配置项集中在哪个文件？这些配置是在什么时机（初始化链路）被加载生效",
+    "gt_files": [
+      "pm8350b_regmap.h",
+      "bd99954-charger.h"
+    ],
+    "gt_basenames": [
+      "bd99954-charger.h",
+      "pm8350b_regmap.h"
+    ]
+  },
+  {
+    "id": "Q28",
+    "question": "Battery Manager BSP 配置里的充电 heartbeat timer（3",
+    "gt_files": [
+      "BattMngr_init.c",
+      "BattMngrStateMachine.c"
+    ],
+    "gt_basenames": [
+      "BattMngrStateMachine.c",
+      "BattMngr_init.c"
+    ]
+  },
+  {
+    "id": "Q29",
+    "question": "cable event poll timer（40s）是干什么用的？为什么插线检测需要轮",
+    "gt_files": [
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q31",
+    "question": "SOC linearization 是什么？convergent point（500）和",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q33",
+    "question": "\"Enable Step charging + Jeita\" 开关关掉后充电行为会有什么",
+    "gt_files": [
+      "BattmngrBsp.h",
+      "battery.c"
+    ],
+    "gt_basenames": [
+      "BattmngrBsp.h",
+      "battery.c"
+    ]
+  },
+  {
+    "id": "Q34",
+    "question": "JEITA 配置里的 \"use HW Jeita\"（值为 2）是什么模式？HW JEIT",
+    "gt_files": [
+      "battmngr_plat_scpqchg2s_extfg_r1.c",
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngr_plat_scpqchg2s_extfg_r1.c"
+    ]
+  },
+  {
+    "id": "Q35",
+    "question": "JEITA 表为什么有两份（normal battery ID 和 unknown ba",
+    "gt_files": [
+      "battmngr_plat_scpqchg2s_extfg_r1.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_scpqchg2s_extfg_r1.c"
+    ]
+  },
+  {
+    "id": "Q36",
+    "question": "critical cold/hot 与 hard cold/hot 的行为差异是什么？\"",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q38",
+    "question": "充电器 die 温度、整机 skin 温度、Type-C 口温度、并行充电器温度这四路热",
+    "gt_files": [
+      "battmngr_plat_scpqchg_qbg_r1.c",
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngr_plat_scpqchg_qbg_r1.c"
+    ]
+  },
+  {
+    "id": "Q39",
+    "question": "热缓解触发后是降 FCC、降 ICL 还是停充？high 和 low 阈值之间有没有迟滞",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q40",
+    "question": "各温度传感器分别接在哪个 ADC 通道（AMUX_THM / USB_THER / SM",
+    "gt_files": [
+      "qcom-spmi-adc5.c"
+    ],
+    "gt_basenames": [
+      "qcom-spmi-adc5.c"
+    ]
+  },
+  {
+    "id": "Q41",
+    "question": "回充的 SOC delta（5%）和 delta Vfloat（50mV）两个条件是\"或",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q43",
+    "question": "Aged Battery Compensation 是什么？怎么判断电池老化？老化后 F",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q44",
+    "question": "电池电压极低（死电池）时系统的充电启动流程是怎样的？XBL 阶段和 UEFI 阶段各负责",
+    "gt_files": [
+      "pm_config_target.c"
+    ],
+    "gt_basenames": [
+      "pm_config_target.c"
+    ]
+  },
+  {
+    "id": "Q45",
+    "question": "死电池充电的 bootup threshold 和 powerup threshold",
+    "gt_files": [
+      "ChargerLibCommon.h",
+      "pm_config_target.c"
+    ],
+    "gt_basenames": [
+      "ChargerLibCommon.h",
+      "pm_config_target.c"
+    ]
+  },
+  {
+    "id": "Q48",
+    "question": "死电池充电时的 sign of life 是 LED，UEFI 阶段才点亮屏幕——这段显",
+    "gt_files": [
+      "ChargerLibTarget.c"
+    ],
+    "gt_basenames": [
+      "ChargerLibTarget.c"
+    ]
+  },
+  {
+    "id": "Q49",
+    "question": "UEFI 阶段的 OsStandardBootSocThreshold 是按 SOC 还",
+    "gt_files": [
+      "ChargerLibTarget.c",
+      "pm_config_target.c"
+    ],
+    "gt_basenames": [
+      "ChargerLibTarget.c",
+      "pm_config_target.c"
+    ]
+  },
+  {
+    "id": "Q51",
+    "question": "APSD（自动充电类型检测）是怎么识别 SDP/CDP/DCP 的？识别结果在哪里能读到",
+    "gt_files": [
+      "charger_detection.c",
+      "pm8350b_regmap.h"
+    ],
+    "gt_basenames": [
+      "charger_detection.c",
+      "pm8350b_regmap.h"
+    ]
+  },
+  {
+    "id": "Q52",
+    "question": "AICL（自动输入限流）是怎么工作的？它会自己把 ICL 往下调吗？AICL 调低之后怎",
+    "gt_files": [
+      "battery.c",
+      "smblite-lib.c"
+    ],
+    "gt_basenames": [
+      "battery.c",
+      "smblite-lib.c"
+    ]
+  },
+  {
+    "id": "Q53",
+    "question": "USB_IN 的工作电压范围（3.6~13.2V，abs max 28V）超压时硬件靠什",
+    "gt_files": [
+      "twl4030_charger.c"
+    ],
+    "gt_basenames": [
+      "twl4030_charger.c"
+    ]
+  },
+  {
+    "id": "Q54",
+    "question": "DC_IN 和 USB_IN 同时存在时优先级怎么判定？DC_IN 接在 MID_CHG",
+    "gt_files": [
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q55",
+    "question": "BATFET 是什么？ship mode 和 AFP mode 分别是什么，如何进入/退",
+    "gt_files": [
+      "BattMngrTech_SMBChg_R1.c",
+      "battmngr_tech_scpq_chg_r1.c"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_SMBChg_R1.c",
+      "battmngr_tech_scpq_chg_r1.c"
+    ]
+  },
+  {
+    "id": "Q56",
+    "question": "Battery Supplement Mode（BSM）是什么？系统瞬时电流超过 buc",
+    "gt_files": [
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q57",
+    "question": "Kelvin sensing（差分电池电压采样）是干什么的？板端走线阻抗大会对 CC 充",
+    "gt_files": [
+      "fg-alg.c"
+    ],
+    "gt_basenames": [
+      "fg-alg.c"
+    ]
+  },
+  {
+    "id": "Q58",
+    "question": "涓流充电（trickle charging）在什么电压区间触发？电流多大？",
+    "gt_files": [
+      "bd99954-charger.c"
+    ],
+    "gt_basenames": [
+      "bd99954-charger.c"
+    ]
+  },
+  {
+    "id": "Q59",
+    "question": "电池缺失检测（battery missing）是怎么实现的？检测误报会导致什么现象？",
+    "gt_files": [
+      "ChargerLibCommon.c"
+    ],
+    "gt_basenames": [
+      "ChargerLibCommon.c"
+    ]
+  },
+  {
+    "id": "Q60",
+    "question": "并行充电（SMB139x / 双充）在本平台有没有用？如果启用，主从充电器的电流分配在哪",
+    "gt_files": [
+      "icm_scp_inov.c",
+      "sw_smb139x.h"
+    ],
+    "gt_basenames": [
+      "icm_scp_inov.c",
+      "sw_smb139x.h"
+    ]
+  },
+  {
+    "id": "Q61",
+    "question": "kernel 侧 qti_battery_charger 驱动是怎么和 ADSP 充电固",
+    "gt_files": [
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q62",
+    "question": "battery power supply 上能读到哪些属性（status/health/",
+    "gt_files": [
+      "battmngr_i.c",
+      "max77693_charger.c"
+    ],
+    "gt_basenames": [
+      "battmngr_i.c",
+      "max77693_charger.c"
+    ]
+  },
+  {
+    "id": "Q63",
+    "question": "charge_control_limit 属性写下去后 ADSP 是怎么处理的？和直接改",
+    "gt_files": [
+      "icm_mcp_buck_inov.c",
+      "BattMngrTech_ParallelCharging_R3.c"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_ParallelCharging_R3.c",
+      "icm_mcp_buck_inov.c"
+    ]
+  },
+  {
+    "id": "Q64",
+    "question": "USB power supply 的 INPUT_CURRENT_LIMIT 属性为什么",
+    "gt_files": [
+      "battmngr_plat_scpqchg2s_extfg_r1.c",
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_scpqchg2s_extfg_r1.c",
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q65",
+    "question": "USB_TYPE 属性报出来的 HVDCP / PD / PPS 类型是怎么从 ADSP",
+    "gt_files": [
+      "pd_vdm_messages.h",
+      "battery.c"
+    ],
+    "gt_basenames": [
+      "battery.c",
+      "pd_vdm_messages.h"
+    ]
+  },
+  {
+    "id": "Q66",
+    "question": "ADSP crash（subsys restart）后充电驱动怎么恢复状态？会不会丢充电",
+    "gt_files": [
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q67",
+    "question": "Type-C / PD 协议栈为什么跑在 ADSP 而不是 kernel？HLOS 是通",
+    "gt_files": [
+      "pmic_glink.c",
+      "pd_vdm_messages.h"
+    ],
+    "gt_basenames": [
+      "pd_vdm_messages.h",
+      "pmic_glink.c"
+    ]
+  },
+  {
+    "id": "Q70",
+    "question": "INOV 是什么？Battery Manager 向 PD 栈请求电压电流的机制是怎样的",
+    "gt_files": [
+      "BattMngrStateMachine.c",
+      "ingenic-battery.c"
+    ],
+    "gt_basenames": [
+      "BattMngrStateMachine.c",
+      "ingenic-battery.c"
+    ]
+  },
+  {
+    "id": "Q71",
+    "question": "VCONN 是做什么的？1.5W 的 VCONN 供电能力对带 DP Alt Mode",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q72",
+    "question": "Liquid Presence Detection（液体检测）基于 SBU1/2 阻抗，",
+    "gt_files": [
+      "charger_detection.c"
+    ],
+    "gt_basenames": [
+      "charger_detection.c"
+    ]
+  },
+  {
+    "id": "Q74",
+    "question": "怎么通过 adb 读 PM7250B 充电芯片寄存器（regmap 0-08）？efus",
+    "gt_files": [
+      "pm_config_target.c"
+    ],
+    "gt_basenames": [
+      "pm_config_target.c"
+    ]
+  },
+  {
+    "id": "Q76",
+    "question": "充电相关的中断（USB_PLUGIN、UVLO、OVLO、VBAT_OV、TEMPST_",
+    "gt_files": [
+      "battmngr_plat_irq_scpqchg_qbg_r1.h",
+      "battmngr_plat_irq_schgp_qg.h"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_irq_schgp_qg.h",
+      "battmngr_plat_irq_scpqchg_qbg_r1.h"
+    ]
+  },
+  {
+    "id": "Q77",
+    "question": "充电状态异常时，BCS、ICM、AGGREGATOR 三个模块应该分别看什么信息？FCC",
+    "gt_files": [
+      "battmngr_plat_scpqchg2s_extfg_r1.c",
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngr_plat_scpqchg2s_extfg_r1.c"
+    ]
+  },
+  {
+    "id": "Q78",
+    "question": "锂电池的 CC-CV 充电原理是什么？CC 阶段和 CV 阶段的切换条件是什么？",
+    "gt_files": [
+      "fg-alg.c"
+    ],
+    "gt_basenames": [
+      "fg-alg.c"
+    ]
+  },
+  {
+    "id": "Q80",
+    "question": "充电电流大小对电池循环寿命、充电时间、发热分别有什么影响？C 倍率是什么概念？",
+    "gt_files": [
+      "da9052-battery.c"
+    ],
+    "gt_basenames": [
+      "da9052-battery.c"
+    ]
+  },
+  {
+    "id": "Q81",
+    "question": "充电效率（充入容量/放出容量）一般是多少？剩下的能量去哪了？怎么评估整机充电热损耗？",
+    "gt_files": [
+      "battery.c",
+      "battery.c"
+    ],
+    "gt_basenames": [
+      "battery.c"
+    ]
+  },
+  {
+    "id": "Q82",
+    "question": "为什么低温下大电流充电会析锂？析锂对电池安全意味着什么？",
+    "gt_files": [
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q88",
+    "question": "适配器能力不足导致 VBUS 跌落（collapse）时，系统是怎么自动降流的？UVLO",
+    "gt_files": [
+      "qpnp-smblite.c"
+    ],
+    "gt_basenames": [
+      "qpnp-smblite.c"
+    ]
+  },
+  {
+    "id": "Q89",
+    "question": "充电协议识别失败（一直按 5V/500mA SDP 充）常见的硬件/软件原因有哪些？",
+    "gt_files": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q90",
+    "question": "step charging（分阶段充电）是什么？按 SOC 分段设不同 FCC 的目的是",
+    "gt_files": [
+      "step_chg_jeita_cfg.c",
+      "step_chg_jeita_cfg_waipio.c"
+    ],
+    "gt_basenames": [
+      "step_chg_jeita_cfg.c",
+      "step_chg_jeita_cfg_waipio.c"
+    ]
+  },
+  {
+    "id": "Q91",
+    "question": "高 SOC 段（如 80% 以上）为什么要降电流？\"充到 80% 保护电池\"这类功能怎么",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q92",
+    "question": "边充边玩（system load 大）时，power path 是怎么工作的？电池不充电",
+    "gt_files": [
+      "BattMngrTech_QBG_R1.c",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_QBG_R1.c",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q93",
+    "question": "充电终止后一直插着线，电池自放电到什么程度会回充？长期满电浮充对电池有什么影响，业界怎么",
+    "gt_files": [
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q94",
+    "question": "夜间充电/智能充电（先充到 80%，起床前再充满）这类功能要在哪一层实现？",
+    "gt_files": [
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q95",
+    "question": "多个电流投票者（thermal、jeita、用户设置、系统限流）同时存在时，FCC/IC",
+    "gt_files": [
+      "qpnp-smb5.c",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "qpnp-smb5.c",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q96",
+    "question": "整机有几路温度传感器（电池 NTC、充电 IC die、主板 skin、USB 口）？各",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "qcom-spmi-adc5.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c",
+      "qcom-spmi-adc5.c"
+    ]
+  },
+  {
+    "id": "Q97",
+    "question": "温度读数跳变/读数为 -273 或异常高温，通常是什么硬件问题（NTC 虚焊/分压电阻错",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q98",
+    "question": "JEITA 规范要求的完整温度区间是什么？我们产品定义的温度规格和 JEITA 默认值差",
+    "gt_files": [
+      "battmngr_plat_scpqchg2s_extfg_r1.c",
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngr_plat_scpqchg2s_extfg_r1.c"
+    ]
+  },
+  {
+    "id": "Q99",
+    "question": "充电 IC 过温（die temp）自动降流的硬件 thermal loop 是怎么工作",
+    "gt_files": [
+      "smb1355-charger.c"
+    ],
+    "gt_basenames": [
+      "smb1355-charger.c"
+    ]
+  },
+  {
+    "id": "Q100",
+    "question": "电池过压（VBAT_OV）发生时硬件会做什么？软件收到中断后应该怎么处理？",
+    "gt_files": [
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q101",
+    "question": "充电回路短路、反灌电、VBUS 对地短路等极端故障，硬件上有哪些保护机制（fuse、OV",
+    "gt_files": [
+      "sc27xx_fuel_gauge.c"
+    ],
+    "gt_basenames": [
+      "sc27xx_fuel_gauge.c"
+    ]
+  },
+  {
+    "id": "Q102",
+    "question": "进水/液体检测误报导致不能充电，产线或售后怎么处理？有没有强制绕过手段？",
+    "gt_files": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q103",
+    "question": "外部电量计（I2C）上报的电压/电流/SOC，和充电 IC 内部 ADC 读值不一致时以",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q104",
+    "question": "SOC 跳变（充电时突然从 30% 跳到 50%）一般是什么原因？充电场景下 SOC 平",
+    "gt_files": [
+      "BattMngrTech_SOCFilter_R1.c"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_SOCFilter_R1.c"
+    ]
+  },
+  {
+    "id": "Q105",
+    "question": "充电时显示电量和实际容量不一致（显示 100% 但拔掉立刻掉到 98%），怎么调整 UI",
+    "gt_files": [
+      "BattMngrTech_QBG_R1.c"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_QBG_R1.c"
+    ]
+  },
+  {
+    "id": "Q106",
+    "question": "电池老化（SOH）怎么评估？内阻增大对充电终止判定有什么影响？",
+    "gt_files": [
+      "battery-profile-loader.c"
+    ],
+    "gt_basenames": [
+      "battery-profile-loader.c"
+    ]
+  },
+  {
+    "id": "Q107",
+    "question": "电池认证（battery ID / 加密认证芯片）失败时充电策略是什么（限流/禁充/仅关",
+    "gt_files": [
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q108",
+    "question": "Type-C 口的 DRP（双角色）策略怎么配？设备作为 source 给外设供电的使能",
+    "gt_files": [
+      "class.c",
+      "class.c"
+    ],
+    "gt_basenames": [
+      "class.c"
+    ]
+  },
+  {
+    "id": "Q110",
+    "question": "data role swap（充电时能否传数据）和 power role 的关系是什么？",
+    "gt_files": [
+      "pe.h",
+      "tcpm.c"
+    ],
+    "gt_basenames": [
+      "pe.h",
+      "tcpm.c"
+    ]
+  },
+  {
+    "id": "Q112",
+    "question": "USB 数据线质量差（D+ /D- 接触不良）导致 APSD 识别成 SDP 限流 50",
+    "gt_files": [
+      "pmic_glink_power_supply_msg.h"
+    ],
+    "gt_basenames": [
+      "pmic_glink_power_supply_msg.h"
+    ]
+  },
+  {
+    "id": "Q114",
+    "question": "本项目 Pogo 触点充电的电流路径和保护（触点过温、触点压降大）和普通 USB 充电有",
+    "gt_files": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q117",
+    "question": "反向充电（本设备给耳机/手表充电）需要什么硬件条件？输出限流和过温保护怎么做？",
+    "gt_files": [
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q119",
+    "question": "低电（<5%）时为什么要限制某些功能（禁止开机、提示先充电）？阈值在哪一层判断（UEFI",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q120",
+    "question": "电池完全耗尽后插上充电器，从黑屏到出现充电动画的时间预期是多少？每个阶段（DBC→UEF",
+    "gt_files": [
+      "ChargerLibCommon.c"
+    ],
+    "gt_basenames": [
+      "ChargerLibCommon.c"
+    ]
+  },
+  {
+    "id": "Q121",
+    "question": "低温（-10℃）下电池电压采样偏低导致无法开机，怎么处理（预热充电/提高开机阈值）？",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q122",
+    "question": "充电整机认证（CE/FCC/UL、电池 CB 认证）对软件有哪些硬性要求（如 JEITA",
+    "gt_files": [
+      "smblite-lib.h"
+    ],
+    "gt_basenames": [
+      "smblite-lib.h"
+    ]
+  },
+  {
+    "id": "Q123",
+    "question": "充电温升测试（充电 IC、接口、电池表面温度）的标准测试条件是什么？超标时的软件降流方案",
+    "gt_files": [
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q124",
+    "question": "产线校准（电池 ID 读取、NTC 校准、充电电流校准）的工装流程是什么？校准数据存在哪",
+    "gt_files": [
+      "da9150-charger.c"
+    ],
+    "gt_basenames": [
+      "da9150-charger.c"
+    ]
+  },
+  {
+    "id": "Q125",
+    "question": "怎么用可编程电源/电子负载做充电曲线测试？判断充电曲线是否正常的依据是什么（CC 时长、",
+    "gt_files": [
+      "BattMngrTech_QBG_R1.c"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_QBG_R1.c"
+    ]
+  },
+  {
+    "id": "Q126",
+    "question": "老化测试（循环充放电 500 次后容量保持率）中软件需要做哪些配合（日志记录、循环计数）",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q127",
+    "question": "充电兼容性测试（不同品牌适配器/线材矩阵）出现个别适配器不快充，怎么定位是适配器问题还是",
+    "gt_files": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q128",
+    "question": "插线不充电（无充电图标），排查顺序是什么（中断→APSD→ICL→FCC→charger",
+    "gt_files": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "charger_detection.c",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q129",
+    "question": "充电断断续续（充电图标反复出现消失），怎么区分是线材接触问题、UVLO 抖动还是软件状态",
+    "gt_files": [
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q130",
+    "question": "充电慢（标称快充只跑 5V/1A），从哪些环节逐层排查（协议协商、热缓解、jeita、A",
+    "gt_files": [
+      "battery.c",
+      "qpnp-smb5.c"
+    ],
+    "gt_basenames": [
+      "battery.c",
+      "qpnp-smb5.c"
+    ]
+  },
+  {
+    "id": "Q133",
+    "question": "拔线后充电状态不复位、电量图标残留，kernel 侧哪个模块负责状态清理？",
+    "gt_files": [
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q134",
+    "question": "ADSP 重启（chargerPD crash）后充电中断、ICL 卡在 500mA，怎",
+    "gt_files": [
+      "charger_detection.c"
+    ],
+    "gt_basenames": [
+      "charger_detection.c"
+    ]
+  },
+  {
+    "id": "Q136",
+    "question": "长期满电插电使用（车机/IoT 场景）电池鼓包风险，怎么用软件策略规避（限制 FV 到",
+    "gt_files": [
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q137",
+    "question": "充电相关要看哪些日志（ADSP 侧 Trace/QXDM CHGPD log、kerne",
+    "gt_files": [
+      "ChargerLibCommon.c"
+    ],
+    "gt_basenames": [
+      "ChargerLibCommon.c"
+    ]
+  },
+  {
+    "id": "Q138",
+    "question": "充电全链路的关键信号（VBUS、VBAT、ICL、FCC、JEITA zone、char",
+    "gt_files": [
+      "pm8350b_regmap.h",
+      "bd99954-charger.h"
+    ],
+    "gt_basenames": [
+      "bd99954-charger.h",
+      "pm8350b_regmap.h"
+    ]
+  },
+  {
+    "id": "Q139",
+    "question": "pmic glink 消息（power_supply/charger 类型）的格式定义在",
+    "gt_files": [
+      "pmic_glink.c",
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "pmic_glink.c",
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q140",
+    "question": "有哪些现成的 adb 命令/sysfs 节点可以做充电自检（读类型、读限流、读寄存器、强",
+    "gt_files": [
+      "smb5-lib.c",
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "qti_battery_charger.c",
+      "smb5-lib.c"
+    ]
+  }
+]

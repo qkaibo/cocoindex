@@ -39,7 +39,7 @@ from cocoindex.connectorkits.target import ManagedBy
 from cocoindex.connectors import localfs, qdrant
 from cocoindex.ops.sentence_transformers import SentenceTransformerEmbedder
 from cocoindex.ops.text import RecursiveSplitter
-from cocoindex.resources.chunk import Chunk
+from cocoindex.resources.chunk import Chunk, TextPosition
 from cocoindex.resources.file import FileLike, PatternFilePathMatcher
 from cocoindex.resources.id import IdGenerator
 from cocoindex.resources.schema import VectorSchema
@@ -82,7 +82,16 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 
 def collection_name(project: str) -> str:
-    return f"aosp_{project}"
+    """Qdrant collection 名 = project 名(带平台类型前缀)。
+
+    - qcm4490 (AOSP/Android)        → ``aosp_qcm4490``
+    - seahorse_wear_base (RTOS)      → ``rtos_seahorse_wear_base``
+    前缀约定: aosp_=Android, rtos_=RTOS/嵌入式固件; 新平台在映射表追加。
+    """
+    return {
+        "qcm4490": "aosp_qcm4490",
+        "seahorse_wear_base": "rtos_seahorse_wear_base",
+    }.get(project, project)
 
 
 def load_platforms(config_path: pathlib.Path | None = None) -> dict[str, Any]:
@@ -497,6 +506,91 @@ async def process_code_file(
         )
 
 
+# ── DTS 节点级切分 (tree-sitter-devicetree, 方案A) ─────────────────────
+# cocoindex 的 RecursiveSplitter 无 dts grammar → 默认正则切分(无节点边界、
+# function_name 全 None)。这里用 tree-sitter-devicetree 解析成真 AST,
+# 按节点聚合切块(自适应粒度: 节点≤chunk/2 整块, 大节点深入子节点)。
+# symbol_index 用 start-1 兼容 _find_enclosing_symbol 的 bisect_left-1 语义,
+# 使每个 chunk 的 function_name = 块内首个节点 (如 'pm6150_pon: pon@800')。
+
+_DTS_PARSER: Any = None
+_DTS_PARSER_LOCK = threading.Lock()
+
+
+def _dts_parser() -> Any:
+    global _DTS_PARSER
+    with _DTS_PARSER_LOCK:
+        if _DTS_PARSER is None:
+            from tree_sitter import Language, Parser
+            import tree_sitter_devicetree
+            _DTS_PARSER = Parser(Language(tree_sitter_devicetree.language()))
+        return _DTS_PARSER
+
+
+def _dts_node_display(text: str, n: Any) -> str:
+    """节点显示名: 'label: name@addr' / 'name@addr' / '&ref' / '/'"""
+    head = text[n.start_byte:n.end_byte].split("{", 1)[0].strip()
+    return head[:80]
+
+
+def _dts_collect_nodes(root: Any, chunk_size: int) -> list[Any]:
+    """自适应粒度: 节点 ≤ chunk_size//2 整块; 更大则深入子节点。返回不重叠链。"""
+    out: list[Any] = []
+    threshold = chunk_size // 2
+
+    def walk(n: Any) -> None:
+        if n.type == "node":
+            if n.end_byte - n.start_byte <= threshold:
+                out.append(n)
+            else:
+                for c in n.named_children:
+                    walk(c)
+        else:
+            for c in n.named_children:
+                walk(c)
+    walk(root)
+    out.sort(key=lambda n: (n.start_byte, n.end_byte))
+    return out
+
+
+def _dts_make_chunk(text: str, s: int, e: int) -> Chunk:
+    return Chunk(
+        text=text[s:e],
+        start=TextPosition(byte_offset=s, char_offset=len(text[:s]),
+                           line=text.count("\n", 0, s) + 1,
+                           column=s - (text.rfind("\n", 0, s) + 1) + 1),
+        end=TextPosition(byte_offset=e, char_offset=len(text[:e]),
+                         line=text.count("\n", 0, e) + 1,
+                         column=e - (text.rfind("\n", 0, e) + 1) + 1),
+    )
+
+
+def _split_dts(text: str, chunk_size: int = 1000) -> tuple[list[Chunk], list[tuple[int, str]]]:
+    """tree-sitter-devicetree 节点级切分 → (chunks, symbol_index)。
+    块 = 连续节点区间 [node_i.start, node_{i+1}.start), 节点间空隙并入块内, 100% 覆盖。
+    """
+    parser = _dts_parser()
+    tree = parser.parse(text.encode("utf-8"))
+    root = tree.root_node
+    nodes = _dts_collect_nodes(root, chunk_size)
+    symbol_index = [(n.start_byte - 1, _dts_node_display(text, n)) for n in nodes]
+
+    chunks: list[Chunk] = []
+    if nodes and nodes[0].start_byte > 0:
+        chunks.append(_dts_make_chunk(text, 0, nodes[0].start_byte))  # 文件头(注释/#include)
+    block_start: int | None = None
+    for i, n in enumerate(nodes):
+        nxt = nodes[i + 1].start_byte if i + 1 < len(nodes) else len(text)
+        if block_start is None:
+            block_start = n.start_byte
+        elif nxt - block_start > chunk_size + 200:
+            chunks.append(_dts_make_chunk(text, block_start, n.start_byte))
+            block_start = n.start_byte
+    if block_start is not None:
+        chunks.append(_dts_make_chunk(text, block_start, len(text)))
+    return chunks, symbol_index
+
+
 async def _process_code_file_impl(
     file: FileLike,
     module: str,
@@ -509,26 +603,45 @@ async def _process_code_file_impl(
     text = await file.read_text()
     language = _guess_language(fname)
 
-    try:
-        chunks = await asyncio.wait_for(
-            asyncio.to_thread(
-                _code_splitter.split,
+    if language == "dts":
+        # 方案A: tree-sitter-devicetree 节点级切分; 解析失败回退默认正则切分
+        try:
+            chunks, symbol_index = _split_dts(text)
+        except Exception as e:
+            _logger.warning(
+                "dts node split failed (%d B, %s): %s, falling back to default split",
+                len(text), fpath, e,
+            )
+            chunks = await asyncio.wait_for(
+                asyncio.to_thread(
+                    _code_splitter.split,
+                    text, chunk_size=1000, min_chunk_size=300, chunk_overlap=200,
+                    language="dts",
+                ),
+                timeout=300,
+            )
+            symbol_index = _build_symbol_index(text, "dts")
+    else:
+        try:
+            chunks = await asyncio.wait_for(
+                asyncio.to_thread(
+                    _code_splitter.split,
+                    text, chunk_size=1000, min_chunk_size=300, chunk_overlap=200,
+                    language=language,
+                ),
+                timeout=300,
+            )
+        except asyncio.TimeoutError:
+            _logger.warning(
+                "tree-sitter split timed out (%d B, lang=%s), falling back to plain-text: %s",
+                len(text), language, fpath,
+            )
+            chunks = _code_splitter.split(
                 text, chunk_size=1000, min_chunk_size=300, chunk_overlap=200,
-                language=language,
-            ),
-            timeout=300,
-        )
-    except asyncio.TimeoutError:
-        _logger.warning(
-            "tree-sitter split timed out (%d B, lang=%s), falling back to plain-text: %s",
-            len(text), language, fpath,
-        )
-        chunks = _code_splitter.split(
-            text, chunk_size=1000, min_chunk_size=300, chunk_overlap=200,
-            language=None,
-        )
+                language=None,
+            )
+        symbol_index = _build_symbol_index(text, language or "text")
     id_gen = IdGenerator()
-    symbol_index = _build_symbol_index(text, language or "text")
     await coco.map(
         write_chunk,
         chunks, module, project, "code", fpath, language or "text", fname, text,

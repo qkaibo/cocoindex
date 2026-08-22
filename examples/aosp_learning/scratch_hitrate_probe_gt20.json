@@ -1,0 +1,219 @@
+[
+  {
+    "id": "Q1",
+    "question": "这个项目的充电整体架构是什么？哪些逻辑跑在 ADSP（battmngr），哪些跑在 ke",
+    "gt_files": [
+      "pmic_glink_msg.h",
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "pmic_glink_msg.h",
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q2",
+    "question": "qti_battery_charger和power_supply子系统的关系？",
+    "gt_files": [
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q3",
+    "question": "kernel 侧 battery_chg_dev 里的 property id和 ADS",
+    "gt_files": [
+      "pmic_glink_msg.h",
+      "qti_battery_charger.c"
+    ],
+    "gt_basenames": [
+      "pmic_glink_msg.h",
+      "qti_battery_charger.c"
+    ]
+  },
+  {
+    "id": "Q5",
+    "question": "jeita 各区间（critical cold / hard cold / soft c",
+    "gt_files": [
+      "battmngrconfig_props.c",
+      "battmngrconfig_props.c"
+    ],
+    "gt_basenames": [
+      "battmngrconfig_props.c"
+    ]
+  },
+  {
+    "id": "Q6",
+    "question": "每个 jeita 区间对应的 FCC/FV 补偿在哪里配置？soft 区的 FCC 降流",
+    "gt_files": [
+      "smb5-lib.c",
+      "smblite-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c",
+      "smblite-lib.c"
+    ]
+  },
+  {
+    "id": "Q7",
+    "question": "充电状态分哪几种，状态上报 NOT_CHARGING 和 DISCHARGING 的区别",
+    "gt_files": [
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q8",
+    "question": "怎么增加假温度节点用来模拟各个温度的限流停充策略？",
+    "gt_files": [
+      "BattMngrTech_ParallelCharging_R3.h"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_ParallelCharging_R3.h"
+    ]
+  },
+  {
+    "id": "Q9",
+    "question": "充电截止电压（float voltage，FV）在哪里配置？整机默认是多少，怎么改成 4",
+    "gt_files": [
+      "battery.c"
+    ],
+    "gt_basenames": [
+      "battery.c"
+    ]
+  },
+  {
+    "id": "Q10",
+    "question": "充电截止电流（iterm）在哪里配置，怎么定值？iterm 设置不当会导致什么问题（提前",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngr_tech_schgp_chg.h"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c",
+      "battmngr_tech_schgp_chg.h"
+    ]
+  },
+  {
+    "id": "Q11",
+    "question": "最大充电电流（FCC）和输入限流（ICL）在哪里配置？不同充电类型（SDP/DCP/PD",
+    "gt_files": [
+      "battery.c"
+    ],
+    "gt_basenames": [
+      "battery.c"
+    ]
+  },
+  {
+    "id": "Q12",
+    "question": "OTG 输出电流在哪里配置？",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q13",
+    "question": "DCIN 路径的电压/电流上限（dcin_voltage_max_mv / dcin_c",
+    "gt_files": [
+      "icm_scp_inov_dcin.c",
+      "BattmngrBsp.h"
+    ],
+    "gt_basenames": [
+      "BattmngrBsp.h",
+      "icm_scp_inov_dcin.c"
+    ]
+  },
+  {
+    "id": "Q16",
+    "question": "回充（recharge）条件在哪里配置？SOC 掉多少、电压掉多少会触发回充？",
+    "gt_files": [
+      "qpnp-qg.c"
+    ],
+    "gt_basenames": [
+      "qpnp-qg.c"
+    ]
+  },
+  {
+    "id": "Q17",
+    "question": "充电终止（TERMINATION）的判定条件是什么？",
+    "gt_files": [
+      "BattMngrTech_QBG_R1.h",
+      "smb5-lib.c"
+    ],
+    "gt_basenames": [
+      "BattMngrTech_QBG_R1.h",
+      "smb5-lib.c"
+    ]
+  },
+  {
+    "id": "Q20",
+    "question": "off-mode（关机态）Pogo 充电怎么使能？关机状态下 ADSP 的充电任务是怎么",
+    "gt_files": [
+      "charger_thread.h"
+    ],
+    "gt_basenames": [
+      "charger_thread.h"
+    ]
+  },
+  {
+    "id": "Q21",
+    "question": "battmngr状态机更新逻辑是什么？",
+    "gt_files": [
+      "BattMngrStateMachineLevels.c",
+      "battman_power.c"
+    ],
+    "gt_basenames": [
+      "BattMngrStateMachineLevels.c",
+      "battman_power.c"
+    ]
+  },
+  {
+    "id": "Q22",
+    "question": "关机充电（KPOC）时 LED 怎么控制？",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q25",
+    "question": "关机电压（低电自动关机阈值）在哪里配置？",
+    "gt_files": [
+      "battmngr_plat_schgp_qg.c"
+    ],
+    "gt_basenames": [
+      "battmngr_plat_schgp_qg.c"
+    ]
+  },
+  {
+    "id": "Q26",
+    "question": "适配三方电量计，要做哪些配置",
+    "gt_files": [
+      "sw_8350b.c"
+    ],
+    "gt_basenames": [
+      "sw_8350b.c"
+    ]
+  },
+  {
+    "id": "Q27",
+    "question": "ADSP 充电软件的可配置项集中在哪个文件？这些配置是在什么时机（初始化链路）被加载生效",
+    "gt_files": [
+      "pm8350b_regmap.h",
+      "bd99954-charger.h"
+    ],
+    "gt_basenames": [
+      "bd99954-charger.h",
+      "pm8350b_regmap.h"
+    ]
+  }
+]

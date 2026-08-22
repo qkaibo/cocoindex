@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QCM4490 充电模块电量计 I2C/QUP 拓扑分析 — MCP 检索结果</title>
+<style>
+:root{
+  --bg:#0f172a; --card:#1e293b; --card2:#16213a; --border:#334155;
+  --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --adsp:#f472b6;
+  --green:#34d399; --yellow:#fbbf24; --red:#f87171; --purple:#a78bfa;
+  --code-bg:#0b1120;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.65;padding:0 0 60px}
+.wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+
+/* 封面 */
+.cover{text-align:center;padding:70px 20px 50px;border-bottom:1px solid var(--border);background:linear-gradient(160deg,#0b1120 0%,#16213a 100%)}
+.cover h1{font-size:2.2rem;font-weight:800;letter-spacing:-.5px;color:#fff}
+.cover .sub{color:var(--muted);margin-top:12px;font-size:1.05rem}
+.badges{margin-top:22px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.badge{font-size:.8rem;padding:5px 14px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.badge-qcom{color:var(--purple);border-color:var(--purple)}
+.badge-adsp{color:var(--adsp);border-color:var(--adsp)}
+.badge-info{border-color:var(--accent);color:var(--accent)}
+
+/* 目录 */
+.toc{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px 26px;margin:30px 0}
+.toc h2{font-size:1.1rem;margin-bottom:14px;color:var(--accent)}
+.toc ol{padding-left:22px;color:var(--muted)}
+.toc li{margin:5px 0}
+.toc a{color:var(--text);text-decoration:none}
+.toc a:hover{color:var(--accent)}
+
+h2.sec{font-size:1.5rem;margin:48px 0 18px;padding-bottom:10px;border-bottom:3px solid var(--accent)}
+h3{font-size:1.15rem;margin:28px 0 12px;color:#fff}
+
+/* 标签 */
+.tag{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:5px;margin-right:6px;vertical-align:middle}
+.tag-kernel{background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.4)}
+.tag-adsp{background:rgba(244,114,182,.15);color:#f472b6;border:1px solid rgba(244,114,182,.4)}
+.tag-noise{background:rgba(248,113,113,.12);color:#f87171;border:1px solid rgba(248,113,113,.4)}
+.tag-ok{background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.4)}
+
+/* 文件卡片 */
+.file{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:16px 0}
+.file .path{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem;color:var(--accent);word-break:break-all;margin-bottom:4px}
+.file .fn{font-family:ui-monospace,Consolas,monospace;font-size:.9rem;color:#fff;margin-bottom:10px}
+.file .fn .func{color:var(--green)}
+
+/* 代码块 */
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.78rem;line-height:1.6;color:#cbd5e1;margin:10px 0}
+pre .c{color:#64748b;font-style:italic}
+pre .k{color:#818cf8}
+pre .s{color:#34d399}
+pre .n{color:#fbbf24}
+
+/* 提示框 */
+.callout{border-left:4px solid var(--accent);background:var(--card2);padding:14px 18px;border-radius:0 8px 8px 0;margin:16px 0}
+.callout.warn{border-color:var(--yellow)}
+.callout.warn .t{color:var(--yellow)}
+.callout.info{border-color:var(--accent)}
+.callout.info .t{color:var(--accent)}
+.callout.good{border-color:var(--green)}
+.callout.good .t{color:var(--green)}
+.callout.red{border-color:var(--red)}
+.callout.red .t{color:var(--red)}
+.callout .t{font-weight:700;margin-bottom:6px}
+
+/* 表格 */
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem}
+th{background:#1e3a5f;color:#fff;text-align:left;padding:10px 12px;font-weight:600}
+td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:nth-child(even) td{background:rgba(255,255,255,.025)}
+td.mono,td code{font-family:ui-monospace,Consolas,monospace;font-size:.78rem;color:var(--accent);word-break:break-all}
+
+/* 架构图 */
+.arch{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;margin:16px 0;text-align:center}
+.arch .box{display:inline-block;background:var(--card2);border:1px solid var(--accent);padding:12px 20px;border-radius:8px;margin:8px;font-size:.9rem}
+.arch .box.adsp{border-color:var(--adsp)}
+.arch .arrow{display:inline-block;color:var(--muted);margin:0 10px;font-size:1.2rem}
+.arch .cap{color:var(--muted);font-size:.8rem;margin-top:8px}
+
+/* 状态卡 */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:20px 0}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
+.stat .num{font-size:1.6rem;font-weight:800;color:var(--accent)}
+.stat .lbl{color:var(--muted);font-size:.8rem;margin-top:4px}
+
+footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:50px;padding-top:20px;border-top:1px solid var(--border)}
+@media print{body{background:#fff;color:#000}.cover{background:#fff;color:#000}}
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>QCM4490 充电模块 · 电量计 I2C/QUP 拓扑分析</h1>
+  <div class="sub">基于 aosp-search MCP 语义检索 (BGE-M3 fp16 + Qdrant 7.79M 点) · 数据来源：MCP search_aosp 查询结果</div>
+  <div class="badges">
+    <span class="badge badge-qcom">QCM4490 / parrot</span>
+    <span class="badge badge-adsp">BGE-M3 fp16</span>
+    <span class="badge badge-info">MCP 检索 · 2026-08-08</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+<div class="toc">
+  <h2>📑 目录</h2>
+  <ol>
+    <li><a href="#concl">核心结论</a></li>
+    <li><a href="#arch">电量计拓扑架构</a></li>
+    <li><a href="#evidence">MCP 检索证据链(文件路径 + 片段)</a></li>
+    <li><a href="#noise">噪音识别(非本平台代码)</a></li>
+    <li><a href="#limit">MCP 能力边界</a></li>
+  </ol>
+</div>
+
+<h2 class="sec" id="concl">1. 核心结论</h2>
+<div class="callout good">
+  <div class="t">✅ 结论</div>
+  <b>QCM4490(parrot)电量计(QG)不在外部 QUP/I2C 总线上,而是 PMIC 内嵌的 Qualcomm Gauge,通过 SPMI 总线访问,电量计状态由 ADSP battmngr 管理、经 pmic_glink 上报给 AP。</b> 外部 QUP I2C 总线上挂的是 NFC 等外设,不是电量计。
+</div>
+
+<h2 class="sec" id="arch">2. 电量计拓扑架构</h2>
+<div class="arch">
+  <div class="box">AP(主控)</div>
+  <span class="arrow">⬌</span>
+  <div class="box adsp">ADSP<br><small>battmngr / QG</small></div>
+  <span class="arrow">⬌</span>
+  <div class="box">PMIC<br><small>充电IC / 内嵌QG</small></div><br>
+  <div class="cap">通信链路：AP ↔ pmic_glink ↔ ADSP ↔ SPMI ↔ PMIC(QG 内嵌)</div>
+</div>
+
+<div class="grid">
+  <div class="stat"><div class="num">✔</div><div class="lbl">电量计 QG 内嵌 PMIC</div></div>
+  <div class="stat"><div class="num">SPMI</div><div class="lbl">访问总线(非 I2C)</div></div>
+  <div class="stat"><div class="num">glink</div><div class="lbl">AP↔ADSP 通信</div></div>
+  <div class="stat"><div class="num">NFC@0x28</div><div class="lbl">QUP I2C 实际外设</div></div>
+</div>
+
+<h2 class="sec" id="evidence">3. MCP 检索证据链(文件路径 + 片段)</h2>
+<p style="color:var(--muted)">以下全部来自 <code>search_aosp</code> 语义查询返回的结果,包含文件路径、文件名与代码片段。</p>
+
+<h3>3.1 电量计驱动：PMIC 内嵌 platform 驱动 <span class="tag tag-kernel">[Kernel]</span></h3>
+<div class="file">
+  <div class="path">kernel_platform/msm-kernel/drivers/power/supply/qcom/qpnp-qg.c</div>
+  <div class="fn"><span class="func">qpnp_qg_shutdown()</span> — QG = Qualcomm Gauge</div>
+  <pre><span class="c">// 电量计驱动入口：platform_device,非 i2c_client → 挂在 SPMI 下</span>
+static void qpnp_qg_shutdown(struct <span class="k">platform_device</span> *pdev) {
+    struct qpnp_qg *chip = platform_get_drvdata(pdev);
+    bool input_present = is_input_present(chip);
+    if (!input_present || !chip-&gt;profile_loaded)
+        return;
+    <span class="c">// Charging status doesn't matter when device shuts down</span>
+}</pre>
+</div>
+
+<h3>3.2 充电/电池接口：glink 类型(走 SPMI→ADSP) <span class="tag tag-kernel">[Kernel]</span></h3>
+<div class="file">
+  <div class="path">kernel_platform/qcom/proprietary/devicetree/qcom/parrot.dtsi</div>
+  <div class="fn">battery_charger / ucsi / altmode 节点</div>
+  <pre>battery_charger: qcom,<span class="k">battery_charger</span> { compatible = <span class="s">"qcom,battery-charger"</span>; };
+ucsi:          qcom,<span class="k">ucsi</span>          { compatible = <span class="s">"qcom,ucsi-glink"</span>; }; <span class="c">// glink!</span>
+altmode:       qcom,<span class="k">altmode</span>       { compatible = <span class="s">"qcom,altmode-glink"</span>; }; <span class="c">// glink!</span></pre>
+</div>
+
+<h3>3.3 QUP I2C 总线上挂的是 NFC,不是电量计 <span class="tag tag-kernel">[Kernel]</span></h3>
+<div class="file">
+  <div class="path">kernel_platform/qcom/proprietary/devicetree/qcom/parrot-qrd.dtsi</div>
+  <div class="path">kernel_platform/qcom/proprietary/devicetree/qcom/parrot-atp.dtsi</div>
+  <div class="fn">qupv3_se6_i2c 节点</div>
+  <pre>&amp;qupv3_se6_i2c { status=<span class="s">"ok"</span>; qcom,clk-freq-out=&lt;1000000&gt;;
+    nq@28 { compatible = <span class="s">"qcom,sn-nci"</span>; <span class="c">// 0x28 = NFC(NQ),非电量计</span>
+            reg=&lt;0x28&gt;;
+            qcom,sn-irq=&lt;&amp;tlmm 9 0x00&gt;; ... };</pre>
+</div>
+
+<h3>3.4 QUPv3 实例(总线容器) <span class="tag tag-kernel">[Kernel]</span></h3>
+<div class="file">
+  <div class="path">kernel_platform/qcom/proprietary/devicetree/qcom/parrot-qupv3.dtsi</div>
+  <div class="fn">qupv3_0: qcom,qupv3_0_geni_se@9C0000</div>
+  <pre>qupv3_0: qcom,qupv3_0_geni_se@<span class="n">9C0000</span> {
+    compatible = <span class="s">"qcom,qupv3-geni-se"</span>;
+    reg = &lt;0x9C0000 0x2000&gt;;
+    interconnects = &lt;&amp;clk_virt MASTER_QUP_CORE_0 &amp;clk_virt SLAVE_QUP_CO...&gt;;</pre>
+</div>
+
+<h3>3.5 ADSP 侧电量计管理(在固件侧跑) <span class="tag tag-adsp">[ADSP]</span></h3>
+<div class="file">
+  <div class="path">amss/ADSP.HT.5.7/adsp_proc/core/battman/battmngr/technologyspecific/src/BattMngrTech_QG.c</div>
+  <div class="fn">BattMngrTech_QG_GetQgState()</div>
+  <pre><span class="k">BattMngrTech_QG_SetMonotonicSoc</span> <span class="c">// 电量计单调 SOC 设置</span>
+<span class="k">BattMngrTech_QG_GetQgState</span>()       <span class="c">// 电量计状态获取</span></pre>
+</div>
+<div class="file">
+  <div class="path">amss/ADSP.HT.5.7/adsp_proc/core/battman/battmngr/technologyspecific/src/BattMngrTech_QBG_R1.c</div>
+  <div class="fn">BattMngrTech_QBG_R1_Get_MonotonicSoc()</div>
+  <pre><span class="k">battmngr_tech_qbg_r1_get_system_soc</span>(UINT8 gauge_index, UINT16* pSoc) {
+    if (gauge_index &gt;= PMIC_INDEX_INVALID || pSoc == NULL) return BATTMNGR_EINVALID;
+    uint32_t batt_soc = 0;
+    (void)qbg_get_device_context(...);</pre>
+</div>
+
+<h2 class="sec" id="noise">4. 噪音识别(非本平台代码)</h2>
+<p style="color:var(--muted)">MCP 语义检索会拉入"语义相似但归属其他厂商/平台"的代码,需人工甄别:</p>
+<table>
+<tr><th>文件</th><th>归属</th><th>判定</th></tr>
+<tr><td class="mono">kernel_platform/common/drivers/power/supply/bq2415x_charger.c</td><td>TI</td><td><span class="tag tag-noise">噪音</span></td></tr>
+<tr><td class="mono">kernel_platform/common/include/linux/mfd/max8997.h</td><td>Samsung</td><td><span class="tag tag-noise">噪音</span></td></tr>
+<tr><td class="mono">kernel_platform/common/drivers/power/supply/bq25980_charger.c</td><td>TI</td><td><span class="tag tag-noise">噪音</span></td></tr>
+<tr><td class="mono">kernel_platform/common/drivers/i2c/busses/i2c-qup.c</td><td>高通</td><td><span class="tag tag-ok">总线驱动(通用)</span></td></tr>
+<tr><td class="mono">kernel_platform/msm-kernel/drivers/power/supply/qcom/qpnp-qg.c</td><td>高通</td><td><span class="tag tag-ok">✅ 本平台电量计</span></td></tr>
+</table>
+
+<h2 class="sec" id="limit">5. MCP 能力边界</h2>
+<div class="callout warn">
+  <div class="t">⚠️ 局限</div>
+  <code>search_aosp</code> 是"按 chunk 语义搜索",能给出强证据(驱动类型 platform/i2c、glink 类型、I2C 实际挂载内容),但<b>不能像人读 DTS 那样追踪跨文件引用拓扑</b>(如 "pm7250b 的 qg 节点具体在哪个 SPMI 从地址")。要精确到从地址/寄存器级,需索引结构升级(MCP 能解析 DTS include/引用关系)。
+</div>
+
+</div>
+
+<footer>由 aosp-search MCP 检索结果生成 · BGE-M3(fp16) 语义索引 · 仅含 MCP 返回数据,未直接读取文件系统</footer>
+</body>
+</html>
