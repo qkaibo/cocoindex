@@ -1,8 +1,7 @@
-# qcm4490 高通平台索引配置
-# 按用户要求:
-# 1. amss 全部学习（排除 build 目录 — bringup 生成物，留着等于给答案）
-# 2. qssi 全部排除（不扫描）
-# 3. target 只取 hardware, kernel_platform, vendor
+# 平台索引配置（唯一真相源 — 新增项目只改这里）
+# type: collection 前缀规则化 → collection 名 = f"{type}_{project}"
+#   aosp_ = Android/AOSP 平台, rtos_ = RTOS/嵌入式固件
+# description: 业务领域画像 → 自动生成 search_<project> 工具描述（LLM 选工具的依据）
 #
 # 文件分布:
 #   target/kernel_platform   103K  ┐
@@ -12,6 +11,8 @@
 #
 platforms:
   qcm4490:
+    type: aosp
+    description: "高通 QCM4490 手机平台 AOSP BSP。适用:内核驱动、充电管理(battmngr/fuelgauge)、显示面板、电源、外设、modem(amss)、设备树 等 Android/手机 相关问题"
     aosp_root: /home/ts/ssd/workspace/code/qcm4490
     wiki_root: ./aosp_wiki
     modules:
@@ -24,6 +25,8 @@ platforms:
         wiki_dir: bsp
         description: "BSP: kernel_platform + hardware + vendor + amss（排除 build 目录）"
   seahorse_wear_base:
+    type: rtos
+    description: "恒玄 BES2800 穿戴设备 RTOS 固件。适用:蓝牙协议栈(bthost)、RTOS 内核、多媒体、DSP/NN、耳机应用层 等耳机/智能穿戴 相关问题"
     aosp_root: /home/ts/ssd/workspace/code/Seahorse_wear-base
     wiki_root: ./seahorse_wiki
     modules:

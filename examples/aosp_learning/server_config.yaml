@@ -1,0 +1,10 @@
+# code-search 运行配置 —— 唯一真相源
+# 改完本文件后: systemctl --user restart hermes-code-search 生效
+# 无需改代码、无需改 systemd 服务文件
+
+# token 认证开关
+#   enabled: false = 不校验 token（内网直连，谁都能连）
+#   enabled: true  = 校验 teams.yaml 里每个团队配置的 Bearer token
+#                    （客户端需带 Authorization: Bearer <该团队token>）
+auth:
+  enabled: false

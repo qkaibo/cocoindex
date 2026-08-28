@@ -1,0 +1,20 @@
+# 团队授权矩阵模板（真 token 文件 teams.yaml 不入库, 部署时复制本文件改名并填 token）
+# 每个团队 = 一个独立端口 + 一个 Bearer token，工具列表 = 授权项目的工具
+# projects: 该团队可查的项目（交叉查询 = 多列几个项目）
+# 端口规划: 9101 起
+teams:
+  # 本机管理端口（Hermes gateway/CLI/WebUI 用，全权限）
+  local:
+    token: "CHANGE_ME_LOCAL"
+    projects: [qcm4490, seahorse_wear_base]
+    port: 9101
+  # 示例团队 A: 只查 qcm4490
+  team_a:
+    token: "CHANGE_ME_TEAM_A"
+    projects: [qcm4490]
+    port: 9102
+  # 示例团队 B: 只查 seahorse（交叉查询示例 = projects 里加项目即可）
+  team_b:
+    token: "CHANGE_ME_TEAM_B"
+    projects: [seahorse_wear_base]
+    port: 9103

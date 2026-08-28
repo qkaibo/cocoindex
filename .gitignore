@@ -50,3 +50,8 @@ examples/aosp_learning/index_run.log
 
 # 独立交付物,不入库
 bspbuddy-website*
+
+# aosp_learning MCP: 本地敏感/临时文件不入库(真 token 在 teams.yaml, 模板见 teams.yaml.example)
+examples/aosp_learning/teams.yaml
+examples/aosp_learning/mcp_server.py.bak
+.gitnexus/
