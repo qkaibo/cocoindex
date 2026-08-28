@@ -138,17 +138,6 @@ def collection_name(project: str, platforms: dict) -> str:
     return f"{prefix}_{project}" if prefix else project
 
 
-def gen_tool_description(project: str, plat_cfg: dict) -> str:
-    """工具描述 = 平台画像(platforms.yaml description) + 使用提示。
-    LLM 选工具的依据 —— 描述里的业务关键词决定 tool_search 能否命中。"""
-    biz = plat_cfg.get("description", "代码检索")
-    return (
-        f"搜索 {project} 的代码索引(语义+关键词混合检索)。\n"
-        f"业务场景: {biz}。\n"
-        f"结果带文件路径+行号+代码片段。"
-    )
-
-
 # ── Model / client singletons ───────────────────────────────────────────
 
 def _get_embedder() -> SentenceTransformer:
@@ -324,22 +313,7 @@ async def _run_search(
     return "\n".join(lines)
 
 
-# ── 动态工具生成(数据驱动: 每授权项目一个工具, 描述自动生成) ────────────
-
-def make_project_search_fn(project: str, platforms: dict):
-    """闭包绑定 project 的搜索工具函数。"""
-
-    async def _search(
-        query: Annotated[str, Field(description="自然语言搜索查询(中文或英文), 例如 '蓝牙配对流程'、'MIPI DSI lane config'")],
-        module: Annotated[str | None, Field(description="可选模块过滤(如 'BSP' / 'FW'), 默认全部")] = None,
-        top_k: Annotated[int, Field(ge=1, le=50, description="返回结果条数(1-50)")] = TOP_K_DEFAULT,
-    ) -> str:
-        return await _run_search(query, project, module, top_k, platforms)
-
-    _search.__name__ = f"search_{project}"
-    _search.__qualname__ = f"search_{project}"
-    return _search
-
+# ── 动态工具生成(数据驱动) ──────────────────────────────────────────────
 
 def make_generic_search_fn(allowed_projects: list, platforms: dict):
     """通用入口(原 search_aosp 改名 search_code): project 限定在授权范围内。
@@ -407,25 +381,15 @@ def run_team_server(team_name: str, team_cfg: dict, platforms: dict) -> None:
     )
 
     allowed = team_cfg.get("projects", [])
-    for proj in allowed:
-        plat = platforms.get(proj)
-        if not plat:
-            print(f"[code-search] team={team_name}: 跳过未知项目 '{proj}' (platforms.yaml 无此平台)")
-            continue
-        mcp.add_tool(
-            make_project_search_fn(proj, platforms),
-            name=f"search_{proj}",
-            description=gen_tool_description(proj, plat),
-        )
 
-    # 通用入口(search_code): 便于授权多个项目时一次检索多个/显式指定
+    # 通用入口(search_code): 不传 project = 自动检索本端口全部授权项目; 传 = 精确指定单项目
     mcp.add_tool(
         make_generic_search_fn(allowed, platforms),
         name="search_code",
         description=(
-            "通用代码检索。project 可选: 不传 = 自动检索本端口全部授权项目; 传 = 精确指定单项目。\n"
+            "代码检索(语义+关键词混合检索, 结果带文件路径+行号+代码片段)。\n"
             f"本端口授权项目: {'、'.join(allowed)}。\n"
-            "不确定项目归属时先问用户是哪颗芯片, 或用 search_<project> 独立工具。"
+            "project 可选: 不传 = 自动检索本端口全部授权项目; 传 = 精确指定单项目。"
         ),
     )
 
