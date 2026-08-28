@@ -351,16 +351,23 @@ def make_generic_search_fn(allowed_projects: list, platforms: dict):
 
     async def _search_code(
         query: Annotated[str, Field(description="自然语言搜索查询(中文或英文), 例如 '蓝牙配对流程'、'MIPI DSI lane config'")],
-        project: Annotated[str, Field(description="项目/芯片标识, 决定搜索哪套代码。可选值见本工具描述, 不确定时先问用户是哪颗芯片")],
+        project: Annotated[str | None, Field(description="可选: 指定项目精确检索(必须是本端口授权项目); 不传 = 自动检索本端口全部授权项目")] = None,
         module: Annotated[str | None, Field(description="可选模块过滤(如 'BSP' / 'FW'), 默认全部")] = None,
         top_k: Annotated[int, Field(ge=1, le=50, description="返回结果条数(1-50)")] = TOP_K_DEFAULT,
     ) -> str:
-        if project not in allowed_projects:
-            return (
-                f"Error: 项目 '{project}' 不在本端口授权范围内。"
-                f"可用项目: {'、'.join(allowed_projects)}。"
-            )
-        return await _run_search(query, project, module, top_k, platforms)
+        if project is not None:
+            if project not in allowed_projects:
+                return (
+                    f"Error: 项目 '{project}' 不在本端口授权范围内。"
+                    f"可用项目: {'、'.join(allowed_projects)}。"
+                )
+            return await _run_search(query, project, module, top_k, platforms)
+
+        # 不传 project: 遍历本端口授权项目, 逐个检索, 结果分项目标注拼接
+        parts = []
+        for p in allowed_projects:
+            parts.append(await _run_search(query, p, module, top_k, platforms))
+        return "\n\n".join(parts) if parts else "本端口未授权任何项目。"
 
     _search_code.__name__ = "search_code"
     return _search_code
@@ -416,7 +423,7 @@ def run_team_server(team_name: str, team_cfg: dict, platforms: dict) -> None:
         make_generic_search_fn(allowed, platforms),
         name="search_code",
         description=(
-            "通用代码检索(需显式指定 project)。\n"
+            "通用代码检索。project 可选: 不传 = 自动检索本端口全部授权项目; 传 = 精确指定单项目。\n"
             f"本端口授权项目: {'、'.join(allowed)}。\n"
             "不确定项目归属时先问用户是哪颗芯片, 或用 search_<project> 独立工具。"
         ),
